@@ -2,6 +2,7 @@ import os
 import grp
 import getpass
 import time
+import subprocess
 import daq_macros
 from math import *
 from gon_lib import *
@@ -16,6 +17,7 @@ from daq_utils import getBlConfig
 from config_params import *
 from start_bs import govs, gov_robot, flyer
 import gov_lib
+from kafka_producer import send_kafka_message
 import logging
 logger = logging.getLogger(__name__)
 
@@ -256,12 +258,17 @@ def mountSample(sampID):
   currentMountedSampleID = mountedSampleDict["sampleID"]
   if (getBlConfig(TOP_VIEW_CHECK) == 1):
     logger.info("setting work pos")
-    if (daq_utils.beamline == "amx"):                          
-      setPvDesc("robotXWorkPos",getPvDesc("robotXMountPos"))
-      setPvDesc("robotYWorkPos",getPvDesc("robotYMountPos"))
-      setPvDesc("robotZWorkPos",getPvDesc("robotZMountPos"))
-      setPvDesc("robotOmegaWorkPos",90.0)    
-      logger.info("done setting work pos")  
+    if daq_utils.beamline == "fmx":
+      beamline_lib.mvaDescriptor("sampleX", getPvDesc("robotXMountPos"))
+      beamline_lib.mvaDescriptor("sampleY", getPvDesc("robotYMountPos"))
+      beamline_lib.mvaDescriptor("sampleZ", getPvDesc("robotZMountPos"))
+      beamline_lib.mvaDescriptor("omega", 90.0)
+      logger.info(f'Done moving motors for{daq_utils.beamline}')
+    setPvDesc("robotXWorkPos",getPvDesc("robotXMountPos"))
+    setPvDesc("robotYWorkPos",getPvDesc("robotYMountPos"))
+    setPvDesc("robotZWorkPos",getPvDesc("robotZMountPos"))
+    setPvDesc("robotOmegaWorkPos",90.0)    
+    logger.info("done setting work pos")  
   if (currentMountedSampleID != ""): #then unmount what's there
     if (sampID!=currentMountedSampleID):
       puckPos = mountedSampleDict["puckPos"]
@@ -375,7 +382,7 @@ def runDCQueue(): #maybe don't run rasters from here???
     logger.info("processing request " + str(time.time()))
     reqObj = currentRequest["request_obj"]
     gov_lib.set_detz_in(gov_robot, reqObj["detDist"])
-    if (reqObj["detDist"] >= 200.0 and getBlConfig("HePath") == 0):
+    if (reqObj["detDist"] >= ROBOT_MIN_DISTANCE and getBlConfig("HePath") == 0):
       gov_lib.set_detz_out(gov_robot, reqObj["detDist"])
     sampleID = currentRequest["sample"]
     mountedSampleDict = db_lib.beamlineInfo(daq_utils.beamline, 'mountedSample')
@@ -496,8 +503,9 @@ def collectData(currentRequest):
     os.system(comm_s)
   logger.debug('starting initial motions - transmission and detector distance')
   daq_macros.setTrans(attenuation)
-  beamline_lib.mvaDescriptor("detectorDist",colDist)  
-  logger.debug('transmission and detector distance done')
+  if prot not in ["rasterScreen", "eScan"]:
+    beamline_lib.mvaDescriptor("detectorDist",colDist)  
+  logger.debug('transmission and detector distance (if not fluorescence-related) done')
   # now that the detector is in the correct position, get the beam center
   currentRequest['request_obj']['xbeam'] = getPvDesc('beamCenterX')
   currentRequest['request_obj']['ybeam'] = getPvDesc('beamCenterY')
@@ -625,6 +633,10 @@ def collectData(currentRequest):
     logger.error("caught index error in logging")
   except KeyError as e:
     logger.error('caught key error in logging: %s' % e)
+
+  # collection finished, start processing
+  if reqObj["protocol"] in ("standard", "vector", "raster"):
+    send_kafka_message(topic=f'{daq_utils.beamline}.lsdc.documents', event='stop', uuid=currentRequest['uid'], protocol=reqObj["protocol"])
   if (prot == "vector" or prot == "standard" or prot == "stepVector"):
     if daq_utils.beamline != "nyx":
       seqNum = int(detector_get_seqnum())
@@ -651,16 +663,16 @@ def collectData(currentRequest):
           else:
             comm_s = os.environ["LSDCHOME"] + "/runFastDP.py " + data_directory_name + " " + file_prefix + " " + str(file_number_start) + " " + str(int(round(range_degrees/img_width))) + " " + str(currentRequest["uid"]) + " " + str(fastEPFlag) + " " + node + " " + str(dimpleFlag) + " " + dimpleNode + "&"
           logger.info(f'Running fastdp command: {comm_s}')
-          if (daq_utils.beamline == "amx"):                                            
-            visitName = daq_utils.getVisitName()
-            if (not os.path.exists(visitName + "/fast_dp_dir")):
-              os.system("killall -KILL loop-fdp-dple-populate")
-              os.system("cd " + visitName + ";${LSDCHOME}/bin/loop-fdp-dple-populate.sh&")
+          visitName = daq_utils.getVisitName()
+          if (not os.path.exists(visitName + "/fast_dp_dir")) or subprocess.run(['pgrep', '-f', 'loop-fdp-dple-populate'], stdout=subprocess.PIPE).returncode == 1:  # for pgrep, return of 1 means string not found
+            os.system("killall -KILL loop-fdp-dple-populate")
+            logger.info('starting fast dp result gathering script')
+            os.system("cd " + visitName + ";${LSDCHOME}/bin/loop-fdp-dple-populate.sh&")
           os.system(comm_s)
         if (reqObj["xia2"]):
           comm_s = f"ssh -q xf17id2-srv1 \"{os.environ['MXPROCESSINGSCRIPTSDIR']}xia2.sh {currentRequest['uid']} \"&"
           os.system(comm_s)
-  
+
   logger.info('processing should be triggered')
   db_lib.updatePriority(currentRequest["uid"],-1)
   refreshGuiTree()
@@ -730,7 +742,7 @@ def detectorArm(angle_start,image_width,number_of_images,exposure_period,filepre
   detector_set_filepath(data_directory_name)
   detector_set_fileprefix(file_prefix_minus_directory)
   detector_set_filenumber(file_number)
-  detector_set_fileheader(angle_start,image_width,beamline_lib.motorPosFromDescriptor("detectorDist"),beamline_lib.motorPosFromDescriptor("wavelength"),0.0,exposure_period,getPvDesc("beamCenterX"),getPvDesc("beamCenterY"),"omega",angle_start,0.0,0.0) #only a few for eiger
+  detector_set_fileheader(angle_start,image_width,beamline_lib.motorPosFromDescriptor("detectorDist"),daq_utils.energy2wave(beamline_lib.motorPosFromDescriptor("energy"), 6),0.0,exposure_period,getPvDesc("beamCenterX"),getPvDesc("beamCenterY"),"omega",angle_start,0.0,0.0) #only a few for eiger
   
   detector_start() #but you need wired or manual trigger
   startArm = time.time()

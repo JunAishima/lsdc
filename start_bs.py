@@ -4,6 +4,8 @@ from ophyd import *
 from ophyd.mca import (Mercury1, SoftDXPTrigger)
 from ophyd import Device, EpicsMotor, EpicsSignal, EpicsSignalRO
 from mxtools.zebra import Zebra
+from mxtools.vector_program import VectorProgram, VectorProgramStart, VectorProgramEnd
+from mxtools.eiger import EigerSingleTriggerV26, setup_eiger_defaults
 import os
 from nyxtools.governor import _make_governors
 
@@ -90,7 +92,6 @@ class VerticalDCM(Device):
     e = Cpt(EpicsMotor, '-Ax:E}Mtr')
     w = Cpt(EpicsMotor, '-Ax:W}Mtr')
 
-                    
 class StandardProsilica(SingleTrigger, ProsilicaDetector):
     image = Cpt(ImagePlugin, 'image1:')
     roi1 = Cpt(ROIPlugin, 'ROI1:')
@@ -110,6 +111,7 @@ if (beamline=="amx"):
     zebra = Zebra('XF:17IDB-ES:AMX{Zeb:2}:', name='zebra')
     from mxtools.vector_program import VectorProgram
     vector_program = VectorProgram('XF:17IDB-ES:AMX{Gon:1-Vec}', name='vector_program')
+    eiger = EigerSingleTriggerV26('', name='eiger')
     from embl_robot import EMBLRobot
     robot = EMBLRobot()
 
@@ -121,6 +123,7 @@ elif beamline == "fmx":
     zebra = Zebra('XF:17IDC-ES:FMX{Zeb:3}:', name='zebra')
     from mxtools.vector_program import VectorProgram
     vector_program = VectorProgram('XF:17IDC-ES:FMX{Gon:1-Vec}', name='vector_program')
+    eiger = EigerSingleTriggerV26('XF:17IDC-ES:FMX{Det:Eig16M}', name='eiger')
     from embl_robot import EMBLRobot
     robot = EMBLRobot()
 
@@ -147,3 +150,4 @@ elif beamline=="nyx":
 
 else:
     raise Exception(f"Invalid beamline name provided: {beamline}")
+setup_eiger_defaults(eiger)

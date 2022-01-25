@@ -44,13 +44,24 @@ ws_split = hostname.split('ws')
 logging_file = 'lsdcGuiLog.txt'
 
 import logging
+import platform
 from logging import handlers
+
+class HostnameFilter(logging.Filter):
+    hostname = platform.node().split('.')[0]
+
+    def filter(self, record):
+        record.hostname = HostnameFilter.hostname
+        return True
+
 logger = logging.getLogger()
 logging.getLogger().setLevel(logging.INFO)
 logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(logging.WARNING)
 handler1 = handlers.RotatingFileHandler(logging_file, maxBytes=5000000, backupCount=100)
+handler1.addFilter(HostnameFilter())
 #handler2 = handlers.RotatingFileHandler('/var/log/dama/%slsdcGuiLog.txt' % os.environ['BEAMLINE_ID'], maxBytes=50000000)
-myformat = logging.Formatter('%(asctime)s %(name)-8s %(levelname)-8s %(message)s')
+#hostname added with help from: https://stackoverflow.com/questions/55584115/python-logging-how-to-track-hostname-in-logs
+myformat = logging.Formatter('%(asctime)s %(hostname)s: %(name)-8s %(levelname)-8s %(message)s')
 handler1.setFormatter(myformat)
 #handler2.setFormatter(myformat)
 logger.addHandler(handler1)
@@ -167,7 +178,8 @@ class RasterExploreDialog(QtWidgets.QDialog):
 
 
 class StaffScreenDialog(QFrame):  
-    def __init__(self,parent = None):
+    def __init__(self, parent = None, **kwargs):
+        show = kwargs.get('show', True)
         self.parent=parent
         QFrame.__init__(self)
         self.setWindowTitle("Staff Only")
@@ -227,6 +239,10 @@ class StaffScreenDialog(QFrame):
         else:
           self.guiRemoteOnCheckBox.setChecked(False)            
         self.guiRemoteOnCheckBox.stateChanged.connect(self.guiRemoteOnCheckCB)
+        self.albulaDispCheckBox = QCheckBox("Display Data (Albula)")
+        self.albulaDispCheckBox.setChecked(True)
+        hBoxColParams1.addWidget(self.albulaDispCheckBox)
+
         self.enableMountCheckBox = QCheckBox("Enable Mount")
         if (getBlConfig("mountEnabled") == 1):
           self.enableMountCheckBox.setChecked(True)
@@ -267,6 +283,9 @@ class StaffScreenDialog(QFrame):
           self.fastDPNodeEntryList[i].setFixedWidth(30)
           self.fastDPNodeEntryList[i].setText(str(nodeList[i]))
           hBoxFastDP.addWidget(self.fastDPNodeEntryList[i])
+        self.fastDPCheckBox = QCheckBox("FastDP")
+        self.fastDPCheckBox.setChecked(True)
+        hBoxFastDP.addWidget(self.fastDPCheckBox)
         self.setBeamcenterButton = QtWidgets.QPushButton("Set Beamcenter")
         self.setBeamcenterButton.clicked.connect(self.setBeamcenterCB)
         hBoxFastDP.addWidget(self.setBeamcenterButton)
@@ -328,20 +347,21 @@ class StaffScreenDialog(QFrame):
         vBoxColParams1.addWidget(robotGB)
         vBoxColParams1.addWidget(self.buttons)
         self.setLayout(vBoxColParams1)        
-        self.show()
+        if show:
+          self.show()
 
 
     def getSpotNodeList(self):
       nodeList = []
       for i in range (0,self.spotNodeCount):
-        nodeList.append(int(getBlConfig("spotNode"+str(i+1)).split('-')[1]))
+        nodeList.append(int(getBlConfig("spotNode"+str(i+1)).split('cpu')[1]))
       return nodeList
         
         
     def getFastDPNodeList(self):
       nodeList = []
       for i in range (0,self.fastDPNodeCount):
-        nodeList.append(int(getBlConfig("fastDPNode"+str(i+1)).split('-')[1]))
+        nodeList.append(int(getBlConfig("fastDPNode"+str(i+1)).split('cpu')[1]))
       return nodeList
 
     def setFastDPNodesCB(self):
@@ -930,7 +950,7 @@ class PuckDialog(QtWidgets.QDialog):
 
     def initData(self):
         puckListUnsorted = db_lib.getAllPucks(daq_utils.owner)
-        puckList = sorted(puckListUnsorted,key=lambda i: i['name'],reverse=False)
+        puckList = sorted(puckListUnsorted,key=lambda i: i['time'],reverse=True)
         dewarObj = db_lib.getPrimaryDewar(daq_utils.beamline)
         pucksInDewar = dewarObj['content']
         data = []
@@ -1506,7 +1526,7 @@ class RasterGroup(QtWidgets.QGraphicsItemGroup):
                       filename = cell.data(1)
                       d_min = cell.data(2)
                       intensity = cell.data(3)
-                      if (self.parent.albulaDispCheckBox.isChecked()):
+                      if (self.parent.staffScreenDialog.albulaDispCheckBox.isChecked()):
                           if (filename != "empty"):
                               albulaUtils.albulaDispFile(filename)
                       if not (self.parent.rasterExploreDialog.isVisible()):
@@ -1590,9 +1610,9 @@ class ControlMain(QtWidgets.QMainWindow):
     beamAvailableSignal = QtCore.Signal(float)
     sampleExposedSignal = QtCore.Signal(float)
     sampMoveSignal = QtCore.Signal(int, str)
-    roiChangeSignal = QtCore.Signal(str)
-    highMagCursorChangeSignal = QtCore.Signal(str)
-    lowMagCursorChangeSignal = QtCore.Signal(str)
+    roiChangeSignal = QtCore.Signal(int, str)
+    highMagCursorChangeSignal = QtCore.Signal(int, str)
+    lowMagCursorChangeSignal = QtCore.Signal(int, str)
     cryostreamTempSignal = QtCore.Signal(str)
 
     def __init__(self):
@@ -1608,7 +1628,6 @@ class ControlMain(QtWidgets.QMainWindow):
         self.scannerType = getBlConfig("scannerType")
         self.vectorStart = None
         self.vectorEnd = None
-        self.staffScreenDialog = None
         self.centerMarkerCharSize = 20
         self.centerMarkerCharOffsetX = 12
         self.centerMarkerCharOffsetY = 18
@@ -1616,6 +1635,7 @@ class ControlMain(QtWidgets.QMainWindow):
         self.redPen = QtGui.QPen(QtCore.Qt.red)
         self.bluePen = QtGui.QPen(QtCore.Qt.blue)
         self.yellowPen = QtGui.QPen(QtCore.Qt.yellow)                                
+        albulaUtils.startup_albula()
         self.initUI()
         self.zoom1FrameRatePV = PV(daq_utils.pvLookupDict["zoom1FrameRate"])
         self.zoom2FrameRatePV = PV(daq_utils.pvLookupDict["zoom2FrameRate"])
@@ -1652,6 +1672,7 @@ class ControlMain(QtWidgets.QMainWindow):
           self.motPos = {"x":self.sampx_pv.get(),"y":self.sampy_pv.get(),"z":self.sampz_pv.get(),"omega":self.omega_pv.get()}
         else:
           self.motPos = {"x":self.sampx_pv.get(),"y":self.sampy_pv.get(),"z":self.sampz_pv.get(),"omega":self.omega_pv.get(),"fineX":self.sampFineX_pv.get(),"fineY":self.sampFineY_pv.get(),"fineZ":self.sampFineZ_pv.get()}                    
+        self.staffScreenDialog = StaffScreenDialog(self, show=False)
         self.dewarTree.refreshTreeDewarView()
         if (self.mountedPin_pv.get() == ""):
           mountedPin = db_lib.beamlineInfo(daq_utils.beamline, 'mountedSample')["sampleID"]
@@ -1771,6 +1792,8 @@ class ControlMain(QtWidgets.QMainWindow):
         emptyQueueButton.clicked.connect(functools.partial(self.dewarTree.deleteSelectedCB,1))
         warmupButton = QtWidgets.QPushButton("Warmup Gripper")        
         warmupButton.clicked.connect(self.warmupGripperCB)
+        restartServerButton = QtWidgets.QPushButton("Restart Server")        
+        restartServerButton.clicked.connect(self.restartServerCB)
         self.openShutterButton = QtWidgets.QPushButton("Open Photon Shutter")        
         self.openShutterButton.clicked.connect(self.openPhotonShutterCB)
         self.popUserScreen = QtWidgets.QPushButton("User Screen...")
@@ -1791,6 +1814,7 @@ class ControlMain(QtWidgets.QMainWindow):
         vBoxTreeButtsLayoutRight.addWidget(self.closeShutterButton)
         vBoxTreeButtsLayoutRight.addWidget(deQueueSelectedButton)        
         vBoxTreeButtsLayoutRight.addWidget(emptyQueueButton)
+        vBoxTreeButtsLayoutRight.addWidget(restartServerButton)        
         hBoxTreeButtsLayout.addLayout(vBoxTreeButtsLayoutLeft)
         hBoxTreeButtsLayout.addLayout(vBoxTreeButtsLayoutRight)
         vBoxDFlayout.addLayout(hBoxTreeButtsLayout)
@@ -2026,8 +2050,6 @@ class ControlMain(QtWidgets.QMainWindow):
         self.autoProcessingCheckBox = QCheckBox("AutoProcessing On")
         self.autoProcessingCheckBox.setChecked(True)
         self.autoProcessingCheckBox.stateChanged.connect(self.autoProcessingCheckCB)
-        self.fastDPCheckBox = QCheckBox("FastDP")
-        self.fastDPCheckBox.setChecked(False)
         self.fastEPCheckBox = QCheckBox("FastEP")
         self.fastEPCheckBox.setChecked(False)
         self.fastEPCheckBox.setEnabled(False)
@@ -2036,7 +2058,6 @@ class ControlMain(QtWidgets.QMainWindow):
         self.xia2CheckBox = QCheckBox("Xia2")
         self.xia2CheckBox.setChecked(False)
         self.hBoxProcessingLayout1.addWidget(self.autoProcessingCheckBox)                
-        self.hBoxProcessingLayout1.addWidget(self.fastDPCheckBox)
         self.hBoxProcessingLayout1.addWidget(self.fastEPCheckBox)
         self.hBoxProcessingLayout1.addWidget(self.dimpleCheckBox)                
         self.processingOptionsFrame.setLayout(self.hBoxProcessingLayout1)
@@ -2175,13 +2196,8 @@ class ControlMain(QtWidgets.QMainWindow):
         self.characterizeParamsFrame.hide()
         colParamsGB.setLayout(vBoxColParams1)
         self.dataPathGB = DataLocInfo(self)
-        hBoxDisplayOptionLayout= QtWidgets.QHBoxLayout()        
-        self.albulaDispCheckBox = QCheckBox("Display Data (Albula)")
-        self.albulaDispCheckBox.setChecked(False)
-        hBoxDisplayOptionLayout.addWidget(self.albulaDispCheckBox)
         vBoxMainColLayout.addWidget(colParamsGB)
         vBoxMainColLayout.addWidget(self.dataPathGB)
-        vBoxMainColLayout.addLayout(hBoxDisplayOptionLayout)
         self.mainColFrame.setLayout(vBoxMainColLayout)
         self.mainToolBox.addItem(self.mainColFrame,"Collection Parameters")        
         editSampleButton = QtWidgets.QPushButton("Apply Changes") 
@@ -2315,38 +2331,46 @@ class ControlMain(QtWidgets.QMainWindow):
         vBoxVidLayout.addWidget(self.view)        
         hBoxSampleOrientationLayout = QtWidgets.QHBoxLayout()
         setDC2CPButton = QtWidgets.QPushButton("SetStart")
+        setDC2CPButton.setFixedWidth(50)
         setDC2CPButton.clicked.connect(self.setDCStartCB)        
         omegaLabel = QtWidgets.QLabel("Omega:")
         omegaMonitorPV = str(getBlConfig("omegaMonitorPV"))
         self.sampleOmegaRBVLedit = QtEpicsPVLabel(daq_utils.motor_dict["omega"] + "." + omegaMonitorPV,self,70) 
         omegaSPLabel = QtWidgets.QLabel("SetPoint:")
+        omegaSPLabel.setFixedWidth(70)
         self.sampleOmegaMoveLedit = QtEpicsPVEntry(daq_utils.motor_dict["omega"] + ".VAL",self,70,2)
         self.sampleOmegaMoveLedit.getEntry().returnPressed.connect(self.moveOmegaCB)
         moveOmegaButton = QtWidgets.QPushButton("Move")
         moveOmegaButton.clicked.connect(self.moveOmegaCB)
+        omegaTweakNegButtonSuperFine = QtWidgets.QPushButton("-1")
         omegaTweakNegButtonFine = QtWidgets.QPushButton("-5")        
         omegaTweakNegButton = QtWidgets.QPushButton("<")
         omegaTweakNegButton.clicked.connect(self.omegaTweakNegCB)
         omegaTweakNegButtonFine.clicked.connect(functools.partial(self.omegaTweakCB,-5))
+        omegaTweakNegButtonSuperFine.clicked.connect(functools.partial(self.omegaTweakCB,-1))
         self.omegaTweakVal_ledit = QtWidgets.QLineEdit()
-        self.omegaTweakVal_ledit.setFixedWidth(60)
+        self.omegaTweakVal_ledit.setFixedWidth(45)
         self.omegaTweakVal_ledit.setText("90")
+        omegaTweakPosButtonSuperFine = QtWidgets.QPushButton("+1")
         omegaTweakPosButtonFine = QtWidgets.QPushButton("+5")        
         omegaTweakPosButton = QtWidgets.QPushButton(">")
         omegaTweakPosButton.clicked.connect(self.omegaTweakPosCB)
         omegaTweakPosButtonFine.clicked.connect(functools.partial(self.omegaTweakCB,5))
+        omegaTweakPosButtonSuperFine.clicked.connect(functools.partial(self.omegaTweakCB,1))
         hBoxSampleOrientationLayout.addWidget(setDC2CPButton)
         hBoxSampleOrientationLayout.addWidget(omegaLabel)
         hBoxSampleOrientationLayout.addWidget(self.sampleOmegaRBVLedit.getEntry())
         hBoxSampleOrientationLayout.addWidget(omegaSPLabel)
         hBoxSampleOrientationLayout.addWidget(self.sampleOmegaMoveLedit.getEntry())
-        spacerItem = QtWidgets.QSpacerItem(100, 1, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        hBoxSampleOrientationLayout.insertSpacing(6,100)
+        spacerItem = QtWidgets.QSpacerItem(50, 1, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        hBoxSampleOrientationLayout.insertSpacing(5,50)
+        hBoxSampleOrientationLayout.addWidget(omegaTweakNegButtonSuperFine)
         hBoxSampleOrientationLayout.addWidget(omegaTweakNegButtonFine)
         hBoxSampleOrientationLayout.addWidget(omegaTweakNegButton)        
         hBoxSampleOrientationLayout.addWidget(self.omegaTweakVal_ledit)
         hBoxSampleOrientationLayout.addWidget(omegaTweakPosButton)
-        hBoxSampleOrientationLayout.addWidget(omegaTweakPosButtonFine)        
+        hBoxSampleOrientationLayout.addWidget(omegaTweakPosButtonFine)
+        hBoxSampleOrientationLayout.addWidget(omegaTweakPosButtonSuperFine)
         hBoxSampleOrientationLayout.addStretch(1)
         hBoxVidControlLayout = QtWidgets.QHBoxLayout()
         lightLevelLabel = QtWidgets.QLabel("Light")
@@ -2641,11 +2665,9 @@ class ControlMain(QtWidgets.QMainWindow):
     
     def autoProcessingCheckCB(self,state):
       if state == QtCore.Qt.Checked:
-        self.fastDPCheckBox.setEnabled(True)
         self.dimpleCheckBox.setEnabled(True)
         self.xia2CheckBox.setEnabled(True)                                                          
       else:
-        self.fastDPCheckBox.setEnabled(False)                                  
         self.fastEPCheckBox.setEnabled(False)
         self.dimpleCheckBox.setEnabled(False)
         self.xia2CheckBox.setEnabled(False)                                                          
@@ -3127,10 +3149,11 @@ class ControlMain(QtWidgets.QMainWindow):
       self.beamsizeComboBox.setCurrentIndex(beamSizeFlag)
 
     def processEnergyChange(self,energyVal):
-      if (energyVal<9000):
-        self.beamsizeComboBox.setEnabled(False)
-      else:
-        self.beamsizeComboBox.setEnabled(True)
+      if daq_utils.beamline != "amx":
+        if (energyVal<9000):
+          self.beamsizeComboBox.setEnabled(False)
+        else:
+          self.beamsizeComboBox.setEnabled(True)
         
     def processControlMaster(self,controlPID):
       logger.info("in callback controlPID = " + str(controlPID))
@@ -3216,7 +3239,11 @@ class ControlMain(QtWidgets.QMainWindow):
     def processChoochResult(self,choochResultFlag):
       if (choochResultFlag == "0"):
         return
-      choochResult = db_lib.getResult(choochResultFlag)
+      try:
+        choochResult = db_lib.getResult(choochResultFlag)
+      except IndexError:  # if no result, just return as if no result
+        logger.info(f'Exception while retrieving result for chooch result so not plotting but continuing GUI: {choochResultFlag}')
+        return
       choochResultObj = choochResult["result_obj"]
       graph_x = choochResultObj["choochInXAxis"]
       graph_y = choochResultObj["choochInYAxis"]
@@ -3369,10 +3396,10 @@ class ControlMain(QtWidgets.QMainWindow):
             pass
             
         try:
-          if (float(self.osc_end_ledit.text()) > 4.9):
-            self.fastDPCheckBox.setChecked(True)
+          if (float(self.osc_end_ledit.text()) >= 5.0):
+            self.staffScreenDialog.fastDPCheckBox.setChecked(True)
           else:
-            self.fastDPCheckBox.setChecked(False)              
+            self.staffScreenDialog.fastDPCheckBox.setChecked(False)
         except:
           pass
         
@@ -3459,6 +3486,10 @@ class ControlMain(QtWidgets.QMainWindow):
         self.vidActionRasterDefRadio.setChecked(True)
       else:
         self.vidActionC2CRadio.setChecked(True)
+      if protocol == "burn":
+        self.staffScreenDialog.fastDPCheckBox.setChecked(False)
+      else:
+        self.staffScreenDialog.fastDPCheckBox.setChecked(True)
       if (protocol == "raster"):
         self.protoRasterRadio.setChecked(True)
         self.osc_start_ledit.setEnabled(False)
@@ -3475,7 +3506,6 @@ class ControlMain(QtWidgets.QMainWindow):
         self.osc_start_ledit.setEnabled(True)
         self.osc_end_ledit.setEnabled(True)
       elif (protocol == "burn"):
-        self.fastDPCheckBox.setChecked(False)        
         self.setGuiValues({'osc_range':"0.0", 'exp_time':getBlConfig("burnDefaultTime"), 'transmission':getBlConfig("burnDefaultTrans")})
         screenWidth = float(getBlConfig("burnDefaultNumFrames"))
         self.setGuiValues({'osc_end':screenWidth})
@@ -4332,7 +4362,7 @@ class ControlMain(QtWidgets.QMainWindow):
       reqObj["energy"] = float(self.energy_ledit.text())
       wave = daq_utils.energy2wave(float(self.energy_ledit.text()))
       reqObj["wavelength"] = wave
-      reqObj["fastDP"] =(self.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
+      reqObj["fastDP"] =(self.staffScreenDialog.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
       reqObj["fastEP"] =self.fastEPCheckBox.isChecked()
       reqObj["dimple"] =self.dimpleCheckBox.isChecked()      
       reqObj["xia2"] =self.xia2CheckBox.isChecked()
@@ -4482,7 +4512,7 @@ class ControlMain(QtWidgets.QMainWindow):
              reqObj["pos_x"] = float(self.centeringMarksList[i]["sampCoords"]["x"])
              reqObj["pos_y"] = float(self.centeringMarksList[i]["sampCoords"]["y"])
              reqObj["pos_z"] = float(self.centeringMarksList[i]["sampCoords"]["z"])
-             reqObj["fastDP"] = (self.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
+             reqObj["fastDP"] = (self.staffScreenDialog.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
              reqObj["fastEP"] =self.fastEPCheckBox.isChecked()
              reqObj["dimple"] =self.dimpleCheckBox.isChecked()             
              reqObj["xia2"] =self.xia2CheckBox.isChecked()
@@ -4534,7 +4564,7 @@ class ControlMain(QtWidgets.QMainWindow):
           reqObj["fastEP"] = False
           reqObj["dimple"] = False          
         else:
-          reqObj["fastDP"] = (self.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
+          reqObj["fastDP"] = (self.staffScreenDialog.fastDPCheckBox.isChecked() or self.fastEPCheckBox.isChecked() or self.dimpleCheckBox.isChecked())
           reqObj["fastEP"] =self.fastEPCheckBox.isChecked()
           reqObj["dimple"] =self.dimpleCheckBox.isChecked()          
         reqObj["xia2"] =self.xia2CheckBox.isChecked()
@@ -4625,6 +4655,24 @@ class ControlMain(QtWidgets.QMainWindow):
     def parkGripperCB(self):
       self.send_to_server("parkGripper()")      
       
+    def restartServerCB(self):
+      if (self.controlEnabled()):
+        msg = "Desperation move. Are you sure?"
+        self.timerHutch.stop()
+        self.timerSample.stop()      
+        reply = QtWidgets.QMessageBox.question(self, 'Message',msg, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
+        self.timerSample.start(0)            
+        self.timerHutch.start(HUTCH_TIMER_DELAY)      
+        if reply == QtWidgets.QMessageBox.Yes:
+          if daq_utils.beamline == "fmx" or daq_utils.beamline == 'amx':
+            restart_pv = PV(daq_utils.beamlineComm + "RestartServerSignal")
+            restart_pv.put(not(restart_pv.get()))
+          else:
+            logger.error('Not restarting server - unknown beamline')
+      else:
+        self.popupServerMessage("You don't have control")
+          
+
     def openPhotonShutterCB(self):
       self.photonShutterOpen_pv.put(1)
 
@@ -4786,7 +4834,7 @@ class ControlMain(QtWidgets.QMainWindow):
       self.beamWidth_ledit.setText(str(reqObj["slit_width"]))
       self.beamHeight_ledit.setText(str(reqObj["slit_height"]))
       if ("fastDP" in reqObj):
-        self.fastDPCheckBox.setChecked((reqObj["fastDP"] or reqObj["fastEP"] or reqObj["dimple"]))
+        self.staffScreenDialog.fastDPCheckBox.setChecked((reqObj["fastDP"] or reqObj["fastEP"] or reqObj["dimple"]))
       if ("fastEP" in reqObj):
         self.fastEPCheckBox.setChecked(reqObj["fastEP"])
       if ("dimple" in reqObj):
@@ -4809,7 +4857,7 @@ class ControlMain(QtWidgets.QMainWindow):
 
       if (str(reqObj["protocol"]) == "characterize" or str(reqObj["protocol"]) == "ednaCol" or str(reqObj["protocol"]) == "standard" or str(reqObj["protocol"]) == "vector"):
         if ("priority" in selectedSampleRequest):
-          if (selectedSampleRequest["priority"] < 0 and self.albulaDispCheckBox.isChecked()):
+          if (selectedSampleRequest["priority"] < 0 and self.staffScreenDialog.albulaDispCheckBox.isChecked()):
             firstFilename = daq_utils.create_filename(prefix_long,fnumstart)            
             albulaUtils.albulaDispFile(firstFilename)            
       self.rasterStepEdit.setText(str(reqObj["gridStep"]))
@@ -5125,7 +5173,7 @@ class ControlMain(QtWidgets.QMainWindow):
 
     def popStaffDialogCB(self):
       if (self.controlEnabled()):
-        self.staffScreenDialog = StaffScreenDialog(self)
+        self.staffScreenDialog.show()
       else:
         self.popupServerMessage("You don't have control")          
       
@@ -5150,7 +5198,7 @@ class ControlMain(QtWidgets.QMainWindow):
       self.stopDet_pv = PV(det_stop_pv)
       det_reboot_pv = daq_utils.pvLookupDict["eigerIOC_reboot"]
       logger.info('setting detector ioc reboot PV: %s' % det_reboot_pv)
-      self.rebootDetIOC_pv = PV(daq_utils.beamlineComm + "eigerIOC_reboot")      
+      self.rebootDetIOC_pv = PV(det_reboot_pv)
       rz_pv = daq_utils.pvLookupDict["zebraReset"]
       logger.info('setting zebra reset PV: %s' % rz_pv)
       self.resetZebra_pv = PV(rz_pv)

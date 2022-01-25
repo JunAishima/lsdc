@@ -68,3 +68,8 @@ GOVERNOR_TIMEOUT = 120  # seconds for a governor move
 
 DEWAR_SECTORS = {'amx':8, 'fmx':8, 'nyx':5}
 PUCKS_PER_DEWAR_SECTOR = {'amx':3, 'fmx':3, 'nyx':3}
+ROBOT_MIN_DISTANCE = 200.0
+ROBOT_DISTANCE_TOLERANCE = 0.050
+
+FAST_DP_MIN_NODES = 4
+SPOT_MIN_NODES = 8

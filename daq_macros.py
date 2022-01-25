@@ -30,11 +30,15 @@ from config_params import *
 import gov_lib
 
 from fmx_annealer import govStatusGet, govStateSet, annealer # for using annealer specific to FMX
-from scans import (zebra_daq_prep, setup_zebra_vector_scan,
-                   setup_zebra_vector_scan_for_raster,
-                   setup_vector_program)
 import bluesky.plan_stubs as bps
 import bluesky.plans as bp
+from scans import (zebra_daq_prep, setup_zebra_vector_scan,
+                   setup_zebra_vector_scan_for_raster,
+                   setup_vector_program, setup_eiger_exposure,
+                   setup_eiger_triggers, setup_eiger_arming,
+                   setup_eiger_stop_acquire_and_wait
+                   )
+from kafka_producer import send_kafka_message
 
 try:
   import ispybLib
@@ -56,6 +60,8 @@ global autoVectorFlag, autoVectorCoarseCoords
 autoVectorCoarseCoords = {}
 autoVectorFlag=False
 
+IMAGES_PER_FILE = 500 # default images per HDF5 data file for Eiger
+EXTERNAL_TRIGGER = 2 # external trigger for detector
 #12/19 - general comments. This file takes the brunt of the near daily changes and additions the scientists request. Some duplication and sloppiness reflects that.
 # I'm going to leave a lot of the commented lines in, since they might shed light on things or be useful later.
 
@@ -1413,167 +1419,176 @@ def snakeRasterNormal(rasterReqID,grain=""):
   det_lib.detector_set_trigger_mode(3)
   det_lib.detector_setImagesPerFile(numsteps)  
   daq_lib.detectorArm(omega,img_width_per_cell,totalImages,exptimePerCell,rasterFilePrefix,data_directory_name,file_number_start) #this waits
-  gov_status = gov_lib.setGovRobot(gov_robot, 'DA')
-  if not gov_status.success:
-    if (daq_utils.beamline == "fmx"):
-      setPvDesc("sampleProtect",1)    
-    return      
-  zebraVecDaqSetup(omega,img_width_per_cell,exptimePerCell,numsteps,rasterFilePrefix,data_directory_name,file_number_start)
-  procFlag = int(getBlConfig("rasterProcessFlag"))    
- 
-  spotFindThreadList = [] 
-  for i in range(len(rasterDef["rowDefs"])):
-    if (daq_lib.abort_flag == 1):
-      gov_lib.setGovRobot(gov_robot, 'SA')
+  try:
+    gov_status = gov_lib.setGovRobot(gov_robot, 'DA')
+    if not gov_status.success:
       if (daq_utils.beamline == "fmx"):
         setPvDesc("sampleProtect",1)    
-      return 0
-    numsteps = int(rasterDef["rowDefs"][i]["numsteps"])
-    startX = rasterDef["rowDefs"][i]["start"]["x"]
-    endX = rasterDef["rowDefs"][i]["end"]["x"]
-    startY = rasterDef["rowDefs"][i]["start"]["y"]
-    endY = rasterDef["rowDefs"][i]["end"]["y"]
-    deltaX = abs(endX-startX)
-    deltaY = abs(endY-startY)
-    if ((deltaX != 0) and (deltaX>deltaY or not getBlConfig("vertRasterOn"))): #horizontal raster
-      startY = startY + (stepsize/2.0)
-      endY = startY
-    else: #vertical raster
-      startX = startX + (stepsize/2.0)
-      endX = startX
+      return      
+    zebraVecDaqSetup(omega,img_width_per_cell,exptimePerCell,numsteps,rasterFilePrefix,data_directory_name,file_number_start)
+    procFlag = int(getBlConfig("rasterProcessFlag"))    
+ 
+    spotFindThreadList = [] 
+    for i in range(len(rasterDef["rowDefs"])):
+      if (daq_lib.abort_flag == 1):
+        gov_lib.setGovRobot(gov_robot, 'SA')
+        if (daq_utils.beamline == "fmx"):
+          setPvDesc("sampleProtect",1)    
+        raise Exception('raster aborted')
+      numsteps = int(rasterDef["rowDefs"][i]["numsteps"])
+      startX = rasterDef["rowDefs"][i]["start"]["x"]
+      endX = rasterDef["rowDefs"][i]["end"]["x"]
+      startY = rasterDef["rowDefs"][i]["start"]["y"]
+      endY = rasterDef["rowDefs"][i]["end"]["y"]
+      deltaX = abs(endX-startX)
+      deltaY = abs(endY-startY)
+      if ((deltaX != 0) and (deltaX>deltaY or not getBlConfig("vertRasterOn"))): #horizontal raster
+        startY = startY + (stepsize/2.0)
+        endY = startY
+      else: #vertical raster
+        startX = startX + (stepsize/2.0)
+        endX = startX
       
-    xRelativeMove = startX
+      xRelativeMove = startX
 
-    yzRelativeMove = startY*math.sin(omegaRad)
-    yyRelativeMove = startY*math.cos(omegaRad)
-    logger.info("x rel move = " + str(xRelativeMove))
-    xMotAbsoluteMove = rasterStartX+xRelativeMove #note we convert relative to absolute moves, using the raster center that was saved in x,y,z
-    yMotAbsoluteMove = rasterStartY-yyRelativeMove
-    zMotAbsoluteMove = rasterStartZ-yzRelativeMove
-    xRelativeMove = endX-startX
-    yRelativeMove = endY-startY
-    
-    yyRelativeMove = yRelativeMove*math.cos(omegaRad)
-    yzRelativeMove = yRelativeMove*math.sin(omegaRad)
+      yzRelativeMove = startY*math.sin(omegaRad)
+      yyRelativeMove = startY*math.cos(omegaRad)
+      logger.info("x rel move = " + str(xRelativeMove))
+      xMotAbsoluteMove = rasterStartX+xRelativeMove #note we convert relative to absolute moves, using the raster center that was saved in x,y,z
+      yMotAbsoluteMove = rasterStartY-yyRelativeMove
+      zMotAbsoluteMove = rasterStartZ-yzRelativeMove
+      xRelativeMove = endX-startX
+      yRelativeMove = endY-startY
+ 
+      yyRelativeMove = yRelativeMove*math.cos(omegaRad)
+      yzRelativeMove = yRelativeMove*math.sin(omegaRad)
 
-    xEnd = xMotAbsoluteMove + xRelativeMove
-    yEnd = yMotAbsoluteMove - yyRelativeMove
-    zEnd = zMotAbsoluteMove - yzRelativeMove
+      xEnd = xMotAbsoluteMove + xRelativeMove
+      yEnd = yMotAbsoluteMove - yyRelativeMove
+      zEnd = zMotAbsoluteMove - yzRelativeMove
 
-    if (i%2 != 0): #this is to scan opposite direction for snaking
-      xEndSave = xEnd
-      yEndSave = yEnd
-      zEndSave = zEnd
-      xEnd = xMotAbsoluteMove
-      yEnd = yMotAbsoluteMove
-      zEnd = zMotAbsoluteMove
-      xMotAbsoluteMove = xEndSave
-      yMotAbsoluteMove = yEndSave
-      zMotAbsoluteMove = zEndSave
-    setPvDesc("zebraPulseMax",numsteps) #moved this      
-    setPvDesc("vectorStartOmega",omega)
-    if (img_width_per_cell != 0):
-      setPvDesc("vectorEndOmega",(img_width_per_cell*numsteps)+omega)
-    else:
-      setPvDesc("vectorEndOmega",omega)      
-    setPvDesc("vectorStartX",xMotAbsoluteMove)
-    setPvDesc("vectorStartY",yMotAbsoluteMove)  
-    setPvDesc("vectorStartZ",zMotAbsoluteMove)
-    setPvDesc("vectorEndX",xEnd)
-    setPvDesc("vectorEndY",yEnd)  
-    setPvDesc("vectorEndZ",zEnd)  
-    setPvDesc("vectorframeExptime",exptimePerCell*1000.0)
-    setPvDesc("vectorNumFrames",numsteps)
-    rasterFilePrefix = dataFilePrefix + "_Raster_" + str(i)
-    scanWidth = float(numsteps)*img_width_per_cell
-    logger.info('raster done setting up')
-    vectorWaitForGo(source="snakeRasterNormal")
-    vectorWait()
-    zebraWait()
-    zebraWaitDownload(numsteps)
-    logger.info('done raster')
-    if (procFlag):    
-      if (daq_utils.detector_id == "EIGER-16"):
-        seqNum = int(det_lib.detector_get_seqnum())
+      if (i%2 != 0): #this is to scan opposite direction for snaking
+        xEndSave = xEnd
+        yEndSave = yEnd
+        zEndSave = zEnd
+        xEnd = xMotAbsoluteMove
+        yEnd = yMotAbsoluteMove
+        zEnd = zMotAbsoluteMove
+        xMotAbsoluteMove = xEndSave
+        yMotAbsoluteMove = yEndSave
+        zMotAbsoluteMove = zEndSave
+      setPvDesc("zebraPulseMax",numsteps) #moved this      
+      setPvDesc("vectorStartOmega",omega)
+      if (img_width_per_cell != 0):
+        setPvDesc("vectorEndOmega",(img_width_per_cell*numsteps)+omega)
       else:
-        seqNum = -1
-      logger.info('beginning raster processing with dozor spot_level at %s'
-                   % getBlConfig(RASTER_DOZOR_SPOT_LEVEL))
-      spotFindThread = Thread(target=runDozorThread,args=(data_directory_name,
-                                                          ''.join([filePrefix,"_Raster"]),
-                                                          i,
-                                                          numsteps,
-                                                          seqNum,
-                                                          reqObj,
-                                                          rasterReqID))
-      spotFindThread.start()
-      spotFindThreadList.append(spotFindThread)
+        setPvDesc("vectorEndOmega",omega)      
+      setPvDesc("vectorStartX",xMotAbsoluteMove)
+      setPvDesc("vectorStartY",yMotAbsoluteMove)  
+      setPvDesc("vectorStartZ",zMotAbsoluteMove)
+      setPvDesc("vectorEndX",xEnd)
+      setPvDesc("vectorEndY",yEnd)  
+      setPvDesc("vectorEndZ",zEnd)  
+      setPvDesc("vectorframeExptime",exptimePerCell*1000.0)
+      setPvDesc("vectorNumFrames",numsteps)
+      rasterFilePrefix = dataFilePrefix + "_Raster_" + str(i)
+      scanWidth = float(numsteps)*img_width_per_cell
+      logger.info('raster done setting up')
+      vectorWaitForGo(source="snakeRasterNormal")
+      vectorWait()
+      zebraWait()
+      zebraWaitDownload(numsteps)
+      logger.info('done raster')
+
+      # processing
+      if (procFlag):    
+        if (daq_utils.detector_id == "EIGER-16"):
+          seqNum = int(det_lib.detector_get_seqnum())
+        else:
+          seqNum = -1
+        logger.info('beginning raster processing with dozor spot_level at %s'
+                     % getBlConfig(RASTER_DOZOR_SPOT_LEVEL))
+        spotFindThread = Thread(target=runDozorThread,args=(data_directory_name,
+                                                            ''.join([filePrefix,"_Raster"]),
+                                                            i,
+                                                            numsteps,
+                                                            seqNum,
+                                                            reqObj,
+                                                            rasterReqID))
+        spotFindThread.start()
+        spotFindThreadList.append(spotFindThread)
+      send_kafka_message(f'{daq_utils.beamline}.lsdc.documents', event='event', uuid=rasterReqID, protocol="raster", row=i, proc_flag=procFlag)
 
 
-  """governor transitions:
-  initiate transitions here allows for GUI sample/heat map image to update
-  after moving to known position"""
-  logger.debug(f'lastOnSample(): {lastOnSample()} autoRasterFlag: {autoRasterFlag}')
-  if (lastOnSample() and not autoRasterFlag):
-    govStatus = gov_lib.setGovRobot(gov_robot, 'SA', wait=False)
-    targetGovState = 'SA'
-  else:
-    govStatus = gov_lib.setGovRobot(gov_robot, 'DI')
-    targetGovState = 'DI'
-
-  # priorities:
-  # 1. make heat map visible to users correctly aligned with sample
-  # 2. take snapshot for ISPyB with heat map and sample visible (governor moved to
-  #    a position with backlight in) and aligned
-
-  #data acquisition is finished, now processing and sample positioning
-  if not procFlag:
-    #must go to known position to account for windup dist. 
-    logger.info("moving to raster start")
-    beamline_lib.mvaDescriptor("sampleX",rasterStartX,
-                               "sampleY",rasterStartY,
-                               "sampleZ",rasterStartZ,
-                               "omega",omega)
-    logger.info("done moving to raster start")
-
-  if (procFlag):
-    if daq_lib.abort_flag != 1:
-      [thread.join(timeout=120) for thread in spotFindThreadList]
+    """governor transitions:
+    initiate transitions here allows for GUI sample/heat map image to update
+    after moving to known position"""
+    logger.debug(f'lastOnSample(): {lastOnSample()} autoRasterFlag: {autoRasterFlag}')
+    if (lastOnSample() and not autoRasterFlag):
+      govStatus = gov_lib.setGovRobot(gov_robot, 'SA', wait=False)
+      targetGovState = 'SA'
     else:
-      logger.info("raster aborted, do not wait for spotfind threads")
-    logger.info(str(processedRasterRowCount) + "/" + str(rowCount))      
-    rasterResult = generateGridMap(rasterRequest)
-  
-    logger.info(f'protocol = {reqObj["protocol"]}')
-    if (reqObj["protocol"] == "multiCol" or parentReqProtocol == "multiColQ"):
-      if (parentReqProtocol == "multiColQ"):    
-        multiColThreshold  = parentReqObj["diffCutoff"]
+      govStatus = gov_lib.setGovRobot(gov_robot, 'DI')
+      targetGovState = 'DI'
+
+    # priorities:
+    # 1. make heat map visible to users correctly aligned with sample
+    # 2. take snapshot for ISPyB with heat map and sample visible (governor moved to
+    #    a position with backlight in) and aligned
+
+    #data acquisition is finished, now processing and sample positioning
+    if not procFlag:
+      #mus0t go to known position to account for windup dist. 
+      logger.info("moving to raster start")
+      beamline_lib.mvaDescriptor("sampleX",rasterStartX,
+                                 "sampleY",rasterStartY,
+                                 "sampleZ",rasterStartZ,
+                                 "omega",omega)
+      logger.info("done moving to raster start")
+
+    if (procFlag):
+      if daq_lib.abort_flag != 1:
+        [thread.join(timeout=120) for thread in spotFindThreadList]
       else:
-        multiColThreshold  = reqObj["diffCutoff"]         
-      gotoMaxRaster(rasterResult,multiColThreshold=multiColThreshold) 
-    else:
-      try:
-        # go to start omega for faster heat map display
-        gotoMaxRaster(rasterResult,omega=omega)
-      except ValueError:
-        #must go to known position to account for windup dist.
-        logger.info("moving to raster start")
-        beamline_lib.mvaDescriptor("sampleX",rasterStartX,
-                                   "sampleY",rasterStartY,
-                                   "sampleZ",rasterStartZ,
-                                   "omega",omega)
-        logger.info("done moving to raster start")
+        logger.info("raster aborted, do not wait for spotfind threads")
+      logger.info(str(processedRasterRowCount) + "/" + str(rowCount))      
+      rasterResult = generateGridMap(rasterRequest)
 
-    """change request status so that GUI only fills heat map when
-    xrecRasterFlag PV is set"""
-    rasterRequest["request_obj"]["rasterDef"]["status"] = (
-        RasterStatus.READY_FOR_FILL.value
-    )
-    db_lib.updateRequest(rasterRequest)
-    daq_lib.set_field("xrecRasterFlag",rasterRequest["uid"])
-  
+      logger.info(f'protocol = {reqObj["protocol"]}')
+      if (reqObj["protocol"] == "multiCol" or parentReqProtocol == "multiColQ"):
+        if (parentReqProtocol == "multiColQ"):    
+          multiColThreshold  = parentReqObj["diffCutoff"]
+        else:
+          multiColThreshold  = reqObj["diffCutoff"]         
+        gotoMaxRaster(rasterResult,multiColThreshold=multiColThreshold) 
+      else:
+        try:
+          # go to start omega for faster heat map display
+          gotoMaxRaster(rasterResult,omega=omega)
+        except ValueError:
+          #must go to known position to account for windup dist.
+          logger.info("moving to raster start")
+          beamline_lib.mvaDescriptor("sampleX",rasterStartX,
+                                     "sampleY",rasterStartY,
+                                     "sampleZ",rasterStartZ,
+                                     "omega",omega)
+          logger.info("done moving to raster start")
+
+      """change request status so that GUI only fills heat map when
+      xrecRasterFlag PV is set"""
+      rasterRequest["request_obj"]["rasterDef"]["status"] = (
+          RasterStatus.READY_FOR_FILL.value
+      )
+      db_lib.updateRequest(rasterRequest)
+      daq_lib.set_field("xrecRasterFlag",rasterRequest["uid"])
+      logger.info(f'setting xrecRasterFlag to: {rasterRequest["uid"]}')
+  except Exception as e:
+    logger.error(f'Exception while rastering: {e}')
+    return
+  finally:
   #use this required pause to allow GUI time to fill map and for db update
-  det_lib.detector_stop_acquire()
+    logger.info('stopping detector')
+    det_lib.detector_stop_acquire()
   det_lib.detector_wait()  
   logger.info('detector finished waiting')
 
@@ -2365,7 +2380,7 @@ def eScan(energyScanRequest):
   scanData = db[scanID[0]]
   for ev in scanData.events():
     if ('mercury_mca_spectrum' in ev['data']):
-      logger.info('%s %s' % (ev['seq_num'], ev['data']['mercury_mca_spectrum'].sum()))
+      logger.info('%s %s' % (ev['seq_num'], sum(ev['data']['mercury_mca_spectrum'])))
       
   scanDataTable = scanData.table()
 #these next lines only make sense for the mca
@@ -3136,7 +3151,7 @@ def zebraDaq(vector_program,angle_start,scanWidth,imgWidth,exposurePeriodPerImag
 #careful - there's total exposure time, exposure period, exposure time
 
   logger.info("in Zebra Daq #1 " + str(time.time()))      
-  det_lib.detector_setImagesPerFile(500)
+  yield from bps.mv(eiger.fw_num_images_per_file, IMAGES_PER_FILE)
   daq_lib.setRobotGovState("DA")  
   yield from bps.mv(vector_program.expose, 1)
 
@@ -3153,9 +3168,8 @@ def zebraDaq(vector_program,angle_start,scanWidth,imgWidth,exposurePeriodPerImag
     yield from bps.mv(vector_program.buffer_time, 3)
     pass
   logger.info("in Zebra Daq #2 " + str(time.time()))        
-  det_lib.detector_set_exposure_time(exposurePeriodPerImage)  
-  det_lib.detector_set_period(exposurePeriodPerImage)
-  detector_dead_time = det_lib.detector_get_deadtime()
+  yield from setup_eiger_exposure(eiger, exposurePeriodPerImage, exposurePeriodPerImage)
+  detector_dead_time = eiger.dead_time.get()
   exposureTimePerImage =  exposurePeriodPerImage - detector_dead_time  
   yield from setup_vector_program(vector_program=vector_program, num_images=numImages,
                                   angle_start=angle_start,
@@ -3174,34 +3188,42 @@ def zebraDaq(vector_program,angle_start,scanWidth,imgWidth,exposurePeriodPerImag
                        exposure_period_per_image=exposurePeriodPerImage, num_images=numImages, is_still=imgWidth==0)
   logger.info("zebraDaq - setting and arming detector " + str(time.time()))      
 
-  det_lib.detector_set_num_triggers(1)  
-  det_lib.detector_set_trigger_mode(2)
-  det_lib.detector_set_trigger_exposure(exposureTimePerImage)
+  yield from setup_eiger_triggers(eiger, EXTERNAL_TRIGGER, 1, exposureTimePerImage)
   logger.info("detector arm " + str(time.time()))        
-  daq_lib.detectorArm(angle_start,imgWidth,numImages,exposurePeriodPerImage,filePrefix,data_directory_name,file_number_start) #this waits
-  logger.info("detector done arm, timed in zebraDaq " + str(time.time()))          
-  startArm = time.time()
-  gov_status = gov_lib.setGovRobot(gov_robot, 'DA')
-  if not gov_status.success:
-    return
-  endArm = time.time()
-  armTime = endArm-startArm
-  logger.info("gov wait time = " + str(armTime) +"\n")
-  
-  logger.info("vector Go " + str(time.time()))        
-  yield from bps.mv(vector_program.go, 1)
-  vectorActiveWait()  
-  vectorWait()
-  zebraWait()
-  logger.info("vector Done " + str(time.time()))          
-  if (daq_utils.beamline == "amxz"):  
-    setPvDesc("zebraReset",1)      
   
   if (lastOnSample() and changeState):
     gov_lib.setGovRobot(gov_robot, 'SA', wait=False)
   logger.info("stop det acquire")
   det_lib.detector_stop_acquire()
   det_lib.detector_wait()
+  yield from setup_eiger_arming(eiger, angle_start,imgWidth,numImages,exposurePeriodPerImage,filePrefix,data_directory_name,file_number_start) #this waits
+  try:
+    logger.info("detector done arm, timed in zebraDaq " + str(time.time()))          
+    startArm = time.time()
+    gov_status = gov_lib.setGovRobot(gov_robot, 'DA')
+    if not gov_status.success:
+      return
+    endArm = time.time()
+    armTime = endArm-startArm
+    logger.info("gov wait time = " + str(armTime) +"\n")
+  
+    logger.info("vector Go " + str(time.time()))        
+    yield from bps.mv(vector_program.go, 1)
+    vectorActiveWait()  
+    vectorWait()
+    zebraWait()
+    logger.info("vector Done " + str(time.time()))          
+    if (daq_utils.beamline == "amxz"):  
+      setPvDesc("zebraReset",1)      
+  
+    if (lastOnSample() and changeState):
+      gov_lib.setGovRobot(gov_robot, 'SA', wait=False)   
+    logger.info("stop det acquire")
+  except Exception as e:
+      logger.error(f'Exception while collecting data: {e}')
+    return
+  finally:
+    yield from setup_eiger_stop_acquire_and_wait(eiger)
   yield from bps.mv(vector_program.buffer_time, 3)
   logger.info("zebraDaq Done " + str(time.time()))            
 
@@ -3304,35 +3326,35 @@ def setProcRam():
   if (daq_utils.beamline == "amx"):
     db_lib.setBeamlineConfigParam("amx","spotNode1","xf17id1-srv1")
     db_lib.setBeamlineConfigParam("amx","spotNode2","xf17id1-srv1")
-    db_lib.setBeamlineConfigParam("amx","cbfComm","/usr/local/MX-Soft/bin/eiger2cbfJohn")
-    db_lib.setBeamlineConfigParam("amx","dialsComm","/usr/local/MX-Soft/Phenix/phenix-installer-dev-2666-intel-linux-2.6-x86_64-centos6/build/bin/dials.find_spots_client")        
+    db_lib.setBeamlineConfigParam("amx","cbfComm","eiger2cbf")
+    db_lib.setBeamlineConfigParam("amx","dialsComm","dials.find_spots_client")        
   else:
     db_lib.setBeamlineConfigParam("fmx","spotNode1","xf17id2-ws6")
     db_lib.setBeamlineConfigParam("fmx","spotNode2","xf17id2-ws6")
-    db_lib.setBeamlineConfigParam("fmx","cbfComm","/usr/local/MX-Soft/bin/eiger2cbfJohn")
-    db_lib.setBeamlineConfigParam("fmx","dialsComm","/usr/local/MX-Soft/Phenix/phenix-installer-dev-2666-intel-linux-2.6-x86_64-centos6/build/bin/dials.find_spots_client")        
+    db_lib.setBeamlineConfigParam("fmx","cbfComm","eiger2cbf")
+    db_lib.setBeamlineConfigParam("fmx","dialsComm","dials.find_spots_client")        
     
 
 def setProcGPFS():
   if (daq_utils.beamline == "amx"):
-    db_lib.setBeamlineConfigParam("amx","spotNode1","cpu-002")
-    db_lib.setBeamlineConfigParam("amx","spotNode2","cpu-003")
-    db_lib.setBeamlineConfigParam("amx","spotNode3","cpu-002")
-    db_lib.setBeamlineConfigParam("amx","spotNode4","cpu-003")
-    db_lib.setBeamlineConfigParam("amx","spotNode5","cpu-002")
-    db_lib.setBeamlineConfigParam("amx","spotNode6","cpu-003")    
-    db_lib.setBeamlineConfigParam("amx","cbfComm","/usr/local/crys-local/bin/eiger2cbf-linux")
-    db_lib.setBeamlineConfigParam("amx","dialsComm","/usr/local/crys-local/phenix-1.12-2829/build/bin/dials.find_spots_client")        
+    db_lib.setBeamlineConfigParam("amx","spotNode1","uranus-cpu002")
+    db_lib.setBeamlineConfigParam("amx","spotNode2","uranus-cpu003")
+    db_lib.setBeamlineConfigParam("amx","spotNode3","uranus-cpu002")
+    db_lib.setBeamlineConfigParam("amx","spotNode4","uranus-cpu003")
+    db_lib.setBeamlineConfigParam("amx","spotNode5","uranus-cpu002")
+    db_lib.setBeamlineConfigParam("amx","spotNode6","uranus-cpu003")    
+    db_lib.setBeamlineConfigParam("amx","cbfComm","eiger2cbf")
+    db_lib.setBeamlineConfigParam("amx","dialsComm","dials.find_spots_client")
     
   else:
-    db_lib.setBeamlineConfigParam("fmx","spotNode1","cpu-007")
-    db_lib.setBeamlineConfigParam("fmx","spotNode2","cpu-008")
-    db_lib.setBeamlineConfigParam("fmx","spotNode3","cpu-009")
-    db_lib.setBeamlineConfigParam("fmx","spotNode4","cpu-010")
-    db_lib.setBeamlineConfigParam("fmx","spotNode5","cpu-008")
-    db_lib.setBeamlineConfigParam("fmx","spotNode6","cpu-004")        
-    db_lib.setBeamlineConfigParam("fmx","cbfComm","/usr/local/crys-local/bin/eiger2cbf-linux")
-    db_lib.setBeamlineConfigParam("fmx","dialsComm","/usr/local/crys-prod/phenix-1.11rc2-2531/build/bin/dials.find_spots_client")
+    db_lib.setBeamlineConfigParam("fmx","spotNode1","uranus-cpu007")
+    db_lib.setBeamlineConfigParam("fmx","spotNode2","uranus-cpu008")
+    db_lib.setBeamlineConfigParam("fmx","spotNode3","uranus-cpu009")
+    db_lib.setBeamlineConfigParam("fmx","spotNode4","uranus-cpu010")
+    db_lib.setBeamlineConfigParam("fmx","spotNode5","uranus-cpu008")
+    db_lib.setBeamlineConfigParam("fmx","spotNode6","uranus-cpu004")        
+    db_lib.setBeamlineConfigParam("amx","cbfComm","eiger2cbf")
+    db_lib.setBeamlineConfigParam("amx","dialsComm","dials.find_spots_client")
     
 
 
@@ -3388,19 +3410,19 @@ def guiRemote(): #monitor omega VAL
 
 def spotNodes(*args):
   """spotNodes(*args) : Set the dials spotfinding nodes. You must give 8 nodes. Example: spotNodes(4,5,7,8,12,13,14,15)"""
-  if (len(args) != 8):
-    logger.error("C'mon, I need 8 nodes. No change. Try again.")
+  if (len(args) != SPOT_MIN_NODES):
+    logger.error(f"C'mon, I need {SPOT_MIN_NODES} nodes. No change. Try again.")
   else:
     for i in range (0,len(args)):
-      setBlConfig("spotNode"+str(i+1),"cpu-%03d" % args[i])
+      setBlConfig("spotNode"+str(i+1),"uranus-cpu%03d" % args[i])
 
 def fastDPNodes(*args):
   """fastDPNodes(*args) : Set the fastDP nodes. You must give 4 nodes. Example: fastDPNodes(4,5,7,8)"""  
-  if (len(args) != 4):
-    logger.error("C'mon, I need 4 nodes. No change. Try again.")
+  if (len(args) != FAST_DP_MIN_NODES):
+    logger.error(f"C'mon, I need {FAST_DP_MIN_NODES} nodes. No change. Try again.")
   else:
     for i in range (0,len(args)):
-      setBlConfig("fastDPNode"+str(i+1),"cpu-%03d" % args[i])
+      setBlConfig("fastDPNode"+str(i+1),"uranus-cpu%03d" % args[i])
 
 def setVisitName(vname):
   setBlConfig("visitName",str(vname))
@@ -3531,7 +3553,10 @@ def createProposal(propNum,PI_login="boaty"):
   ispybLib.createProposal(propNum,PI_login)
   
 
-def anneal(annealTime):
+def topViewCheckOn():
+  setBlConfig(TOP_VIEW_CHECK,1)
+
+def anneal(annealTime=1.0):
   if daq_utils.beamline == 'fmx':
     if not govStatusGet('SA'):
       daq_lib.gui_message('Not in Governor state SA, exiting')
@@ -3541,15 +3566,15 @@ def anneal(annealTime):
 
     annealer.air.put(1)
 
-    while not annealer.status.get():
-      logger.info(f'anneal state before annealing: {annealer.status.get()}')
+    while not annealer.inStatus.get():
+      logger.info(f'anneal state before annealing: {annealer.inStatus.get()}')
       time.sleep(0.1)
 
     time.sleep(annealTime)
     annealer.air.put(0)
 
-    while not annealer.status.get():
-      logger.info(f'anneal state after annealing: {annealer.status.get()}')
+    while not annealer.outStatus.get():
+      logger.info(f'anneal state after annealing: {annealer.outStatus.get()}')
       time.sleep(0.1)
 
     govStateSet('SA')
