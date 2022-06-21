@@ -1,6 +1,7 @@
 import ispyb.factory
 from ispyb.exception import ISPyBNoResultException
 import os
+import sys
 from datetime import datetime
 from ispyb.xmltools import mx_data_reduction_to_ispyb, xml_file_to_dict
 import daq_utils
