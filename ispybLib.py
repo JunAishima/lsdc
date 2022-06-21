@@ -1,7 +1,6 @@
 import ispyb.factory
 from ispyb.exception import ISPyBNoResultException
 import os
-import sys
 from datetime import datetime
 from ispyb.xmltools import mx_data_reduction_to_ispyb, xml_file_to_dict
 import daq_utils
@@ -13,11 +12,11 @@ import mysql.connector
 import logging
 logger = logging.getLogger(__name__)
 
+raise Exception('stop importing ispybLib to prevent calling functions - ispyb database is currently down')
 #12/19 - I'm leaving all commented lines alone on this. Karl Levik, DLS, is an immense help with this.
 
 conf_file = os.environ["CONFIGDIR"] + "ispybConfig.cfg"
 visit = 'mx99999-1'
-sys.exit(1)
 # Get a list of request dicts
 #request_dicts = lsdb2.getColRequestsByTimeInterval('2018-02-14T00:00:00','2018-02-15T00:00:00')
 
