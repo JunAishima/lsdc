@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 conf_file = os.environ["CONFIGDIR"] + "ispybConfig.cfg"
 visit = 'mx99999-1'
+sys.exit(1)
 # Get a list of request dicts
 #request_dicts = lsdb2.getColRequestsByTimeInterval('2018-02-14T00:00:00','2018-02-15T00:00:00')
 
