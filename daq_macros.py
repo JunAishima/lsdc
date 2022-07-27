@@ -1605,7 +1605,7 @@ def snakeRasterNormal(rasterReqID,grain=""):
     setPvDesc("sampleProtect",1)
   return 1
 
-def raster_positions(currentRow):
+def raster_positions(stepsize, omegaRad, rasterStartX, rasterStartY, rasterStartZ, row_index, currentRow):
     numsteps = int(currentRow["numsteps"])
     startX = currentRow["start"]["x"]
     endX = currentRow["end"]["x"]
@@ -1638,7 +1638,7 @@ def raster_positions(currentRow):
     yEnd = yMotAbsoluteMove - yyRelativeMove
     zEnd = zMotAbsoluteMove - yzRelativeMove
 
-    if (i%2 != 0): #this is to scan opposite direction for snaking
+    if (row_index%2 != 0): #this is to scan opposite direction for snaking
         xEndSave = xEnd
         yEndSave = yEnd
         zEndSave = zEnd
@@ -1843,7 +1843,7 @@ def snakeRasterBluesky(rasterReqID, grain=""):
     procFlag = int(getBlConfig("rasterProcessFlag"))
     spotFindThreadList = []
     for row_index, row in enumerate(rows):  # since we have vectors in rastering, don't move between each row
-        xMotAbsoluteMove, xEnd, yMotAbsoluteMove, yEnd, zMotAbsoluteMove, zEnd = raster_positions(row)
+        xMotAbsoluteMove, xEnd, yMotAbsoluteMove, yEnd, zMotAbsoluteMove, zEnd = raster_positions(stepsize, omegaRad, rasterStartX, rasterStartY, rasterStartZ, row_index, row)
         vector = {'x': (xMotAbsoluteMove, xEnd), 'y': (yMotAbsoluteMove, yEnd), 'z': (zMotAbsoluteMove, zEnd)}
         yield from zebraDaqRasterBluesky(raster_flyer, omega, numsteps, img_width_per_cell * numsteps, img_width_per_cell, exptimePerCell, rasterFilePrefix,
             data_directory_name, file_number_start, vector)
@@ -1885,7 +1885,7 @@ def snakeRasterBluesky(rasterReqID, grain=""):
     if not procFlag:  # no, no processing. just move to raster start
       #must go to known position to account for windup dist. 
       logger.info("moving to raster start")
-      yield from bps.mv("samplexyz", (rasterStartX, rasterStartY, rasterStartZ, omega))
+      bps.mv("samplexyz", (rasterStartX, rasterStartY, rasterStartZ, omega))
       logger.info("done moving to raster start")
 
     else:  # yes, do row processing
@@ -1910,7 +1910,7 @@ def snakeRasterBluesky(rasterReqID, grain=""):
         except ValueError:
           #must go to known position to account for windup dist.
           logger.info("moving to raster start")
-          yield from bps.mv("samplexyz", (rasterStartX, rasterStartY, rasterStartZ, omega))
+          bps.mv("samplexyz", (rasterStartX, rasterStartY, rasterStartZ, omega))
           logger.info("done moving to raster start")
 
       """change request status so that GUI only fills heat map when
@@ -3402,14 +3402,14 @@ def zebraDaqBluesky(flyer, angle_start, num_images, scanWidth, imgWidth, exposur
 def zebraDaqRasterBluesky(flyer, angle_start, num_images, scanWidth, imgWidth, exposurePeriodPerImage, filePrefix, data_directory_name, file_number_start, vector, scanEncoder=3, changeState=True):  # TODO should be raster flyer
 
     logger.info("in Zebra Daq Raster Bluesky #1")
-    logger.info(f" with vector: {vector_params}")
+    logger.info(f" with vector: {vector}")
 
     x_vec_start=vector["x"][0]
     y_vec_start=vector["y"][0]
     z_vec_start=vector["z"][0]
     x_vec_end=vector["x"][1]
-    y_vec_end=vectors["y"][1]
-    z_vec_end=vectors["z"][1]
+    y_vec_end=vector["y"][1]
+    z_vec_end=vector["z"][1]
     if beamline == "nyx":
       x_vec_start *= 1000
       y_vec_start *= 1000
