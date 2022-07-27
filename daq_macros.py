@@ -1586,7 +1586,7 @@ def snakeRasterNormal(rasterReqID,grain=""):
   #ensure gov transitions have completed successfully
   timeout = 20
   gov_lib.waitGov(govStatus, timeout)
-  if not(govStatus.success) or not(govs.gov.robot.state == targetGovState):
+  if not(govStatus.success) or not(govs.gov.Robot.state.get() == targetGovState):
     logger.error(f"gov status check failed, did not achieve {targetGovState}")
 
   if (procFlag):
