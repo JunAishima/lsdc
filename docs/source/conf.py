@@ -67,7 +67,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'lsdc'
-copyright = '2022, Brookhaven National Lab'
+copyright = '2023, Brookhaven National Lab'
 author = 'Brookhaven National Lab'
 
 # The version info for the project you're documenting, acts as replacement for
