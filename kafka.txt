@@ -1,0 +1,12 @@
+Start document: uuid, seq_num, time
+Events: uuid, row_index
+Stop document: uuid, time
+
+Other events - special processings that require more information in addition to what is shown above:
+EDNA: dna directory, cbf1, cbf2, transmission_percent, flux, xbeam_size, ybeam_size
+eiger2cbf: start_index, end_index, sweep_start
+
+topics
+LSDC <bl> collection
+LSDC <bl> EDNA
+LSDC <bl> eiger2cbf

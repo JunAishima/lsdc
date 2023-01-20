@@ -1,22 +1,20 @@
+import logging
 import os
-
 import time
-
-import six
-
 import uuid
 
 import amostra.client.commands as acc
 import conftrak.client.commands as ccc
-from analysisstore.client.commands import AnalysisClient
 import conftrak.exceptions
-import logging
+import six
+from analysisstore.client.commands import AnalysisClient
+
 logger = logging.getLogger(__name__)
 
-#12/19 - Skinner inherited this from Hugo, who inherited it from Matt. Arman wrote the underlying DB and left BNL in 2018. 
+# 12/19 - Skinner inherited this from Hugo, who inherited it from Matt. Arman wrote the underlying DB and left BNL in 2018.
 
 # TODO: get the beamline_id from parameter
-BEAMLINE_ID = '17ID1'
+BEAMLINE_ID = "17ID1"
 
 
 sample_ref = None
@@ -26,49 +24,50 @@ configuration_ref = None
 mds_ref = None
 analysis_ref = None
 
-main_server = os.environ['MONGODB_HOST']
+main_server = os.environ["MONGODB_HOST"]
 
 services_config = {
-    'amostra': {'host': main_server, 'port': '7770'},
-    'conftrak': {'host': main_server, 'port': '7771'},
-    'metadataservice': {'host': main_server, 'port': '7772'},
-    'analysisstore': {'host': main_server, 'port': '7773'}    
+    "amostra": {"host": main_server, "port": "7770"},
+    "conftrak": {"host": main_server, "port": "7771"},
+    "metadataservice": {"host": main_server, "port": "7772"},
+    "analysisstore": {"host": main_server, "port": "7773"},
 }
 
 
 def db_connect(params=services_config):
-    global sample_ref,container_ref,request_ref,configuration_ref,analysis_ref
+    global sample_ref, container_ref, request_ref, configuration_ref, analysis_ref
     """
     recommended idiom:
     """
-    sample_ref = acc.SampleReference(**params['amostra'])
-    container_ref = acc.ContainerReference(**params['amostra'])
-    request_ref = acc.RequestReference(**params['amostra'])
+    sample_ref = acc.SampleReference(**params["amostra"])
+    container_ref = acc.ContainerReference(**params["amostra"])
+    request_ref = acc.RequestReference(**params["amostra"])
 
-    configuration_ref = ccc.ConfigurationReference(**services_config['conftrak'])
-    analysis_ref = AnalysisClient(services_config['analysisstore'])
+    configuration_ref = ccc.ConfigurationReference(**services_config["conftrak"])
+    analysis_ref = AnalysisClient(services_config["analysisstore"])
     logger.info(analysis_ref)
 
+
 # should be in config :(
-primaryDewarName = 'primaryDewarJohn'
+primaryDewarName = "primaryDewarJohn"
 
 
-#connect on import
+# connect on import
 db_connect()
 
 
-def setCurrentUser(beamline,userName): #for now username, although these should be unique
-  setBeamlineConfigParam(beamline,"user",userName)
+def setCurrentUser(beamline, userName):  # for now username, although these should be unique
+    setBeamlineConfigParam(beamline, "user", userName)
 
-def getCurrentUser(beamline): #for now username, although these should be unique
-  return getBeamlineConfigParam(beamline,"user")
-  
+
+def getCurrentUser(beamline):  # for now username, although these should be unique
+    return getBeamlineConfigParam(beamline, "user")
+
 
 def setPrimaryDewarName(dewarName):
-  global primaryDewarName
+    global primaryDewarName
 
-  primaryDewarName = dewarName
-
+    primaryDewarName = dewarName
 
 
 def searchBeamline(**kwargs):
@@ -86,28 +85,23 @@ def getBeamlineByNumber(num):
         return None
 
 
-def createContainer(name, capacity, owner, kind, **kwargs): #16_pin_puck, automounterDewar, shippingDewar
+def createContainer(name, capacity, owner, kind, **kwargs):  # 16_pin_puck, automounterDewar, shippingDewar
     """
     container_name:  string, name for the new container, required
     kwargs:          passed to constructor
     """
-    
+
     if capacity is not None:
-        kwargs['content'] = [""]*capacity
-    uid = container_ref.create(name=name, 
-                            owner=owner, 
-                            kind=kind,
-                            modified_time=time.time(), 
-                            **kwargs)
+        kwargs["content"] = [""] * capacity
+    uid = container_ref.create(name=name, owner=owner, kind=kind, modified_time=time.time(), **kwargs)
     return uid
 
 
-def updateContainer(cont_info): #really updating the contents
-    cont = cont_info['uid']
-    q = {'uid': cont_info.pop('uid', '')}
-    cont_info.pop('time', '')
-    container_ref.update(q, {'content':cont_info['content'], 
-                             'modified_time': time.time()})  
+def updateContainer(cont_info):  # really updating the contents
+    cont = cont_info["uid"]
+    q = {"uid": cont_info.pop("uid", "")}
+    cont_info.pop("time", "")
+    container_ref.update(q, {"content": cont_info["content"], "modified_time": time.time()})
 
     return cont
 
@@ -118,10 +112,10 @@ def createSample(sample_name, owner, kind, proposalID=None, **kwargs):
     kwargs:       passed to constructor
     """
     # initialize request count to zero
-    if 'request_count' not in kwargs:
-        kwargs['request_count'] = 0
+    if "request_count" not in kwargs:
+        kwargs["request_count"] = 0
 
-    uid = sample_ref.create(name=sample_name, owner=owner,kind=kind,proposalID=proposalID,**kwargs)
+    uid = sample_ref.create(name=sample_name, owner=owner, kind=kind, proposalID=proposalID, **kwargs)
     return uid
 
 
@@ -131,10 +125,10 @@ def incrementSampleRequestCount(sample_id):
     """
 
     # potential for race here?
-#skinner - I don't understand this line    sample_ref.update(query={'uid': sample_id}, update={'$inc': {'request_count': 1}})
-    reqCount = getSampleRequestCount(sample_id)+1
-    sample_ref.update({'uid': sample_id},{'request_count':reqCount})
-    
+    # skinner - I don't understand this line    sample_ref.update(query={'uid': sample_id}, update={'$inc': {'request_count': 1}})
+    reqCount = getSampleRequestCount(sample_id) + 1
+    sample_ref.update({"uid": sample_id}, {"request_count": reqCount})
+
     return getSampleRequestCount(sample_id)
 
 
@@ -143,16 +137,16 @@ def getSampleRequestCount(sample_id):
     get the 'request_count' attribute of the specified sample
     """
     s = getSampleByID(sample_id)
-    return s['request_count']
+    return s["request_count"]
 
 
 def getRequestsBySampleID(sample_id, active_only=True):
     """
     return a list of request dictionaries for the given sample_id
     """
-    params = {'sample': sample_id}
+    params = {"sample": sample_id}
     if active_only:
-        params['state'] = "active"
+        params["state"] = "active"
     reqs = list(request_ref.find(**params))
     return reqs
 
@@ -162,11 +156,10 @@ def getSampleByID(sample_id):
     sample_id:  required, integer
     """
     s = list(sample_ref.find(uid=sample_id))
-    if (s):
-      return s[0]
+    if s:
+        return s[0]
     else:
-      return {}
-  
+        return {}
 
 
 def getSampleNamebyID(sample_id):
@@ -174,35 +167,34 @@ def getSampleNamebyID(sample_id):
     sample_id:  required, integer
     """
     s = getSampleByID(sample_id)
-    if (s==None):
-      return ''
+    if s == None:
+        return ""
     else:
-      return s['name']
+        return s["name"]
 
 
-def getSamplesbyOwner(owner): #skinner
+def getSamplesbyOwner(owner):  # skinner
     s = sample_ref.find(owner=owner)
-    return [samp['uid'] for samp in s]
+    return [samp["uid"] for samp in s]
 
-def getSampleIDbyName(sampleName,owner):
+
+def getSampleIDbyName(sampleName, owner):
     """
     sample_id:  required, integer
     """
-    samples = list(sample_ref.find(owner=owner,name=sampleName))
-    if (samples != []):
-      return samples[0]["uid"]
+    samples = list(sample_ref.find(owner=owner, name=sampleName))
+    if samples != []:
+        return samples[0]["uid"]
     else:
-      return ""
-  
+        return ""
 
-def getContainerIDbyName(container_name,owner):
-    containers = list(container_ref.find(owner=owner,name=container_name))
-    if (containers != []):
-      return containers[0]["uid"]
+
+def getContainerIDbyName(container_name, owner):
+    containers = list(container_ref.find(owner=owner, name=container_name))
+    if containers != []:
+        return containers[0]["uid"]
     else:
-      return ""
-
-
+        return ""
 
 
 def getContainerNameByID(container_id):
@@ -210,11 +202,10 @@ def getContainerNameByID(container_id):
     container_id:  required, integer
     """
     c = list(container_ref.find(uid=container_id))
-    return c[0]['name']
+    return c[0]["name"]
 
 
-def createResult(result_type, owner,request_id=None, sample_id=None, result_obj=None, proposalID=None,
-                 **kwargs):
+def createResult(result_type, owner, request_id=None, sample_id=None, result_obj=None, proposalID=None, **kwargs):
     """
     result_type:  string
     request_id:   int
@@ -222,9 +213,18 @@ def createResult(result_type, owner,request_id=None, sample_id=None, result_obj=
     result_obj:   dict to attach
     """
 
-    header = analysis_ref.insert_analysis_header(result_type=result_type,owner=owner, uid=str(uuid.uuid4()),
-                                                sample=sample_id, request=request_id,
-                                                 provenance={'lsdc':1}, result_obj=result_obj,proposalID=proposalID,time=time.time(),**kwargs)
+    header = analysis_ref.insert_analysis_header(
+        result_type=result_type,
+        owner=owner,
+        uid=str(uuid.uuid4()),
+        sample=sample_id,
+        request=request_id,
+        provenance={"lsdc": 1},
+        result_obj=result_obj,
+        proposalID=proposalID,
+        time=time.time(),
+        **kwargs,
+    )
     logger.info("uuid of result inserted into analysisstore: %s" % header)
 
     return header
@@ -243,12 +243,11 @@ def getResultsforRequest(request_id):
     Takes an integer request_id  and returns a list of matching results or [].
     """
     resultGen = analysis_ref.find_analysis_header(request=request_id)
-    if (resultGen != None):
-      headers = list(resultGen)
-      return headers
+    if resultGen != None:
+        headers = list(resultGen)
+        return headers
     else:
-      return []
-  
+        return []
 
 
 def getResultsforSample(sample_id):
@@ -263,38 +262,64 @@ def getRequestByID(request_id, active_only=True):
     """
     return a list of request dictionaries for the given request_id
     """
-    params = {'uid': request_id}
+    params = {"uid": request_id}
     if active_only:
-        params['state'] = "active"
+        params["state"] = "active"
     req = list(request_ref.find(**params))[0]
     return req
 
 
-def addResultforRequest(result_type, request_id, owner,result_obj=None, **kwargs): 
+def addResultforRequest(result_type, request_id, owner, result_obj=None, **kwargs):
     """
     like createResult, but also adds it to the resultList of result['sample_id']
     """
-    sample = getRequestByID(request_id)['sample'] 
-    r = createResult(owner=owner,result_type=result_type, request_id=request_id, sample_id=sample, result_obj=result_obj, **kwargs)
+    sample = getRequestByID(request_id)["sample"]
+    r = createResult(
+        owner=owner,
+        result_type=result_type,
+        request_id=request_id,
+        sample_id=sample,
+        result_obj=result_obj,
+        **kwargs,
+    )
     return r
 
 
-def addResulttoSample(result_type, sample_id, owner,result_obj=None, as_mongo_obj=False, proposalID=None,**kwargs): 
+def addResulttoSample(
+    result_type, sample_id, owner, result_obj=None, as_mongo_obj=False, proposalID=None, **kwargs
+):
     """
     like addResulttoRequest, but without a request
     """
-    r = createResult(owner=owner,result_type=result_type, request_id=None, sample_id=sample_id, result_obj=result_obj, proposalID=proposalID,**kwargs)
+    r = createResult(
+        owner=owner,
+        result_type=result_type,
+        request_id=None,
+        sample_id=sample_id,
+        result_obj=result_obj,
+        proposalID=proposalID,
+        **kwargs,
+    )
     return r
 
 
-def addResulttoBL(result_type, beamline_id, owner,result_obj=None, proposalID=None,**kwargs):
+def addResulttoBL(result_type, beamline_id, owner, result_obj=None, proposalID=None, **kwargs):
     """
     add result to beamline
     beamline_id: the integer, 'beamline_id' field of the beamline entry
 
     other fields are as for createRequest
     """
-    r = createResult(owner=owner,result_type=result_type, request_id=None, sample_id=None, result_obj=result_obj, beamline_id=beamline_id, proposalID=proposalID,**kwargs)
+    r = createResult(
+        owner=owner,
+        result_type=result_type,
+        request_id=None,
+        sample_id=None,
+        result_obj=result_obj,
+        beamline_id=beamline_id,
+        proposalID=proposalID,
+        **kwargs,
+    )
     return r
 
 
@@ -305,10 +330,10 @@ def getResultsforBL(id=None, name=None, number=None):
     """
     if id is None:
         if name is None:
-            key = 'number'
+            key = "number"
             val = number
         else:
-            key = 'name'
+            key = "name"
             val = name
 
         query = {key: val}
@@ -317,7 +342,7 @@ def getResultsforBL(id=None, name=None, number=None):
             yield None
             raise StopIteration
 
-        id = b['uid']
+        id = b["uid"]
 
         if id is None:
             yield None
@@ -338,9 +363,9 @@ def addFile(data=None, filename=None):
     If a data kwarg is given or data is the 1st arg, store the data.
     If both or neither is given, raise an error.
     """
-    #TODO: Decide what to do with this method
+    # TODO: Decide what to do with this method
     raise NotImplemented
-    '''
+    """
     if filename is not None:
         if data is not None:
             raise ValueError('both filename and data kwargs given.  can only use one.')
@@ -355,7 +380,8 @@ def addFile(data=None, filename=None):
     f.save()
     f.reload()  # to fetch generated id
     return f.to_dbref()
-    '''
+    """
+
 
 def getFile(_id):
     """
@@ -368,9 +394,9 @@ def getFile(_id):
     Maybe this will be automatically deref'd most of the time?
     Only if they're mongoengine ReferenceFields...
     """
-    #TODO: Decide what to do with this method
+    # TODO: Decide what to do with this method
     raise NotImplemented
-    '''
+    """
     try:
         _id = _id.id
 
@@ -380,7 +406,8 @@ def getFile(_id):
     f = GenericFile.objects(__raw__={'_id': _id})  # yes it's '_id' here but just 'id' below, gofigure
     return _try0_dict_key(f, 'file', 'id', _id, None,
                            dict_key='data')
-    '''
+    """
+
 
 def createRequest(request_type, owner, request_obj=None, as_mongo_obj=False, proposalID=None, **kwargs):
     """
@@ -392,17 +419,19 @@ def createRequest(request_type, owner, request_obj=None, as_mongo_obj=False, pro
     request_object or passed in as keyword args to get saved at the
     top level.
     """
-    kwargs['request_type'] = request_type
-    kwargs['request_obj'] = request_obj
-    kwargs['owner'] = owner
-    kwargs['proposalID']=proposalID
+    kwargs["request_type"] = request_type
+    kwargs["request_obj"] = request_obj
+    kwargs["owner"] = owner
+    kwargs["proposalID"] = proposalID
 
     uid = request_ref.create(**kwargs)
 
-    return uid 
+    return uid
 
 
-def addRequesttoSample(sample_id, request_type, owner,request_obj=None, as_mongo_obj=False, proposalID=None,**kwargs):
+def addRequesttoSample(
+    sample_id, request_type, owner, request_obj=None, as_mongo_obj=False, proposalID=None, **kwargs
+):
     """
     sample_id:  required, integer sample id
     request_type:  required, name (string) of request type, dbref to it's db entry, or a Type object
@@ -413,21 +442,23 @@ def addRequesttoSample(sample_id, request_type, owner,request_obj=None, as_mongo
     top level.
     """
 
-    kwargs['sample'] = sample_id
+    kwargs["sample"] = sample_id
     s = time.time()
-    r = createRequest(request_type, owner, request_obj=request_obj, as_mongo_obj=True, proposalID=proposalID,**kwargs)
-    t = time.time()-s
+    r = createRequest(
+        request_type, owner, request_obj=request_obj, as_mongo_obj=True, proposalID=proposalID, **kwargs
+    )
+    t = time.time() - s
     logger.info("add req = " + str(t))
 
     return r
 
 
 def insertIntoContainer(container_name, owner, position, itemID):
-    c = getContainerByName(container_name,owner)
+    c = getContainerByName(container_name, owner)
     if c is not None:
-        cnt = c['content']
+        cnt = c["content"]
         cnt[position - 1] = itemID  # most people don't zero index things
-        c['content'] = cnt
+        c["content"] = cnt
         updateContainer(c)
         return True
     else:
@@ -438,10 +469,10 @@ def insertIntoContainer(container_name, owner, position, itemID):
 def emptyContainer(uid):
     c = getContainerByID(uid)
     if c is not None:
-        cnt = c['content']
-        for i in range (len(cnt)):        
-          cnt[i] = ''
-        c['content'] = cnt
+        cnt = c["content"]
+        for i in range(len(cnt)):
+            cnt[i] = ""
+        c["content"] = cnt
         updateContainer(c)
         return True
     else:
@@ -449,21 +480,21 @@ def emptyContainer(uid):
         return False
 
 
-def getContainers(filters=None): 
+def getContainers(filters=None):
     """get *all* containers"""
     if filters is not None:
-        c = list(container_ref.find(**filters)) #skinner - seems to break on compound filter
+        c = list(container_ref.find(**filters))  # skinner - seems to break on compound filter
     else:
         c = list(container_ref.find())
     return c
 
 
-def getContainersByType(type_name, owner): 
-    #TODO: group_name was not being used kept for compatibility
-    return getContainers(filters={"kind": type_name,"owner":owner})
+def getContainersByType(type_name, owner):
+    # TODO: group_name was not being used kept for compatibility
+    return getContainers(filters={"kind": type_name, "owner": owner})
 
 
-def getAllPucks(owner): #shouldn't this be for owner?
+def getAllPucks(owner):  # shouldn't this be for owner?
     # find all the types desended from 'puck'?
     # and then we could do this?
     return getContainersByType("16_pin_puck", owner)
@@ -474,16 +505,18 @@ def getPrimaryDewar(beamline):
     returns the mongo object for a container with a name matching
     the global variable 'primaryDewarName'
     """
-    return getContainerByName(primaryDewarName,beamline)
+    return getContainerByName(primaryDewarName, beamline)
 
 
-def getContainerByName(container_name,owner):
-    c = getContainers(filters={'name': container_name,'owner':owner})[0] #skinner, this should return only one, not a list
+def getContainerByName(container_name, owner):
+    c = getContainers(filters={"name": container_name, "owner": owner})[
+        0
+    ]  # skinner, this should return only one, not a list
     return c
 
 
 def getContainerByID(container_id):
-    c = getContainers(filters={'uid': container_id})[0]
+    c = getContainers(filters={"uid": container_id})[0]
     return c
 
 
@@ -503,25 +536,24 @@ def getQueue(beamlineName):
     # Nah... [0] is faster and catch Exception...
     DewarItems = []
     try:
-        DewarItems = getPrimaryDewar(beamlineName)['content']
+        DewarItems = getPrimaryDewar(beamlineName)["content"]
     except IndexError as AttributeError:
         raise ValueError('could not find container: "{0}"!'.format(primaryDewarName))
     items = []
     for item in DewarItems:
-      if (item != ""):
-        items.append(item)
+        if item != "":
+            items.append(item)
 
     sample_list = []
-    contents = [getContainerByID(uid)['content'] for uid in items]
+    contents = [getContainerByID(uid)["content"] for uid in items]
     for samp in contents:
-        if (samp != ""):
-          sample_list += samp
+        if samp != "":
+            sample_list += samp
 
     for s in sample_list:
         reqs = getRequestsBySampleID(s, active_only=True)
         for request in reqs:
             yield request
-
 
 
 def getQueueUnorderedObsolete(beamlineName):
@@ -539,7 +571,7 @@ def getQueueUnorderedObsolete(beamlineName):
     # .first() returns None while [0] generates an IndexError
     # Nah... [0] is faster and catch Exception...
     try:
-        items = getPrimaryDewar(beamlineName)['content']
+        items = getPrimaryDewar(beamlineName)["content"]
     except IndexError as AttributeError:
         raise ValueError('could not find container: "{0}"!'.format(primaryDewarName))
 
@@ -547,7 +579,7 @@ def getQueueUnorderedObsolete(beamlineName):
     items.discard("")  # skip empty positions
 
     sample_list = []
-    contents = [getContainerByID(uid)['content'] for uid in items]
+    contents = [getContainerByID(uid)["content"] for uid in items]
     for samp in contents:
         sil = set(samp)
         sil.discard("")
@@ -559,18 +591,16 @@ def getQueueUnorderedObsolete(beamlineName):
             yield request
 
 
-            
 def queueDone(beamlineName):
     ql = list(getQueue(beamlineName))
-    
-    for i in range (0,len(ql)):
-      if (ql[i]['priority'] > 0):
-        return 0
+
+    for i in range(0, len(ql)):
+        if ql[i]["priority"] > 0:
+            return 0
     return 1
-      
 
 
-def getCoordsfromSampleID(beamline,sample_id):
+def getCoordsfromSampleID(beamline, sample_id):
     """
     returns the container position within the dewar and position in
     that container for a sample with the given id in one of the
@@ -578,10 +608,10 @@ def getCoordsfromSampleID(beamline,sample_id):
     'primaryDewarName'
     """
     try:
-        primary_dewar_item_list = getPrimaryDewar(beamline)['content']
+        primary_dewar_item_list = getPrimaryDewar(beamline)["content"]
     except IndexError as AttributeError:
         raise ValueError('could not find container: "{0}"!'.format(primaryDewarName))
-#john    try:
+    # john    try:
 
     # eliminate empty item_list slots
     pdil_set = set(primary_dewar_item_list)
@@ -589,17 +619,17 @@ def getCoordsfromSampleID(beamline,sample_id):
 
     # find container in the primary_dewar_item_list (pdil) which has the sample
 
-    filters = {'$and': [{'uid': {'$in':list(pdil_set)}}, {'content': {'$in':[sample_id]}}]}
+    filters = {"$and": [{"uid": {"$in": list(pdil_set)}}, {"content": {"$in": [sample_id]}}]}
     c = getContainers(filters=filters)
 
     # get the index of the found container in the primary dewar
-    i = primary_dewar_item_list.index(c[0]['uid'])
+    i = primary_dewar_item_list.index(c[0]["uid"])
 
     # get the index of the sample in the found container item_list
-    j = c[0]['content'].index(sample_id)
+    j = c[0]["content"].index(sample_id)
 
     # get the container_id of the found container
-    puck_id = c[0]['uid']
+    puck_id = c[0]["uid"]
 
     return (i, j, puck_id)
 
@@ -611,10 +641,10 @@ def popNextRequest(beamlineName):
     """
     orderedRequests = getOrderedRequestList(beamlineName)
     try:
-        if (orderedRequests[0]["priority"] != 99999):
+        if orderedRequests[0]["priority"] != 99999:
             if orderedRequests[0]["priority"] > 0:
                 return orderedRequests[0]
-        else: #99999 priority means it's running, try next
+        else:  # 99999 priority means it's running, try next
             if orderedRequests[1]["priority"] > 0:
                 return orderedRequests[1]
     except IndexError:
@@ -623,13 +653,14 @@ def popNextRequest(beamlineName):
     return {}
 
 
-def getRequestObsolete(reqID):  # need to get this from searching the dewar I guess 
-#skinner - no idea    reqID = int(reqID)
+def getRequestObsolete(reqID):  # need to get this from searching the dewar I guess
+    # skinner - no idea    reqID = int(reqID)
     """
     request_id:  required, integer id
     """
     r = getRequestByID(reqID)
     return r
+
 
 def updateRequest(request_dict):
     """
@@ -640,10 +671,10 @@ def updateRequest(request_dict):
     against that, making requests basically ephemerally useful objects.
     """
 
-    if 'uid' in request_dict:
-        r_uid = request_dict.pop('uid', '')        
-        s_time = request_dict.pop('time', '')
-        r = request_ref.update({'uid':r_uid},request_dict)
+    if "uid" in request_dict:
+        r_uid = request_dict.pop("uid", "")
+        s_time = request_dict.pop("time", "")
+        r = request_ref.update({"uid": r_uid}, request_dict)
         request_dict["uid"] = r_uid
         request_dict["time"] = s_time
 
@@ -655,34 +686,33 @@ def deleteRequest(r_id):
 
     """
 
-
     r = getRequestByID(r_id)
-    r['state'] = "inactive"
+    r["state"] = "inactive"
     updateRequest(r)
 
 
 def updateSample(sampleObj):
-    if 'uid' in sampleObj:
-        s_uid = sampleObj.pop('uid','')
-        s_time = sampleObj.pop('time','')        
-        s = sample_ref.update({'uid': s_uid}, sampleObj)
+    if "uid" in sampleObj:
+        s_uid = sampleObj.pop("uid", "")
+        s_time = sampleObj.pop("time", "")
+        s = sample_ref.update({"uid": s_uid}, sampleObj)
 
 
 def deleteSample(sample_uid):
     s = getSampleByID(sample_uid)
-    s['state'] = "active"
+    s["state"] = "active"
     updateSample(s)
 
 
-def removePuckFromDewar(beamline,dewarPos):
+def removePuckFromDewar(beamline, dewarPos):
     dewar = getPrimaryDewar(beamline)
-    dewar['content'][dewarPos] = ''
+    dewar["content"][dewarPos] = ""
     updateContainer(dewar)
 
 
 def updatePriority(request_id, priority):
     r = getRequestByID(request_id)
-    r['priority'] = priority
+    r["priority"] = priority
     updateRequest(r)
 
 
@@ -696,10 +726,10 @@ def getPriorityMap(beamlineName):
 
     for request in getQueue(beamlineName):
         try:
-            priority_map[request['priority']].append(request)
+            priority_map[request["priority"]].append(request)
 
         except KeyError:
-            priority_map[request['priority']] = [request]
+            priority_map[request["priority"]] = [request]
 
     return priority_map
 
@@ -715,7 +745,7 @@ def getOrderedRequestList(beamlineName):
 
     for priority in sorted(six.iterkeys(priority_map), reverse=True):
         orderedRequestsList += priority_map[priority]
-        #for request in priority_map[priority]:
+        # for request in priority_map[priority]:
         #    yield request
         # or if we want this to be a generator could it be more efficient
         # with itertools.chain?
@@ -727,20 +757,10 @@ def getOrderedRequestList(beamlineName):
     return orderedRequestsList
 
 
-
-
-
-
-def createBeamline(bl_name, bl_num): #createBeamline("fmx", "17id1")
+def createBeamline(bl_name, bl_num):  # createBeamline("fmx", "17id1")
     data = {"key": "beamline", "name": bl_name, "number": bl_num}
     uid = configuration_ref.create(beamline_id=bl_num, **data)
     return uid
-
-
-
-
-
-
 
 
 def beamlineInfo(beamline_id, info_name, info_dict=None):
@@ -751,14 +771,16 @@ def beamlineInfo(beamline_id, info_name, info_dict=None):
 
     # if it exists it's a query or update
     try:
-        bli = list(configuration_ref.find(key='beamline_info', beamline_id=beamline_id, info_name=info_name))[0] #hugo put the [0]
+        bli = list(configuration_ref.find(key="beamline_info", beamline_id=beamline_id, info_name=info_name))[
+            0
+        ]  # hugo put the [0]
 
         if info_dict is None:  # this is a query
-            return bli['info']
+            return bli["info"]
 
         # else it's an update
-        bli_uid = bli.pop('uid', '')
-        configuration_ref.update({'uid': bli_uid},{'info':info_dict})
+        bli_uid = bli.pop("uid", "")
+        configuration_ref.update({"uid": bli_uid}, {"info": info_dict})
 
     # else it's a create
     except conftrak.exceptions.ConfTrakNotFoundException:
@@ -768,8 +790,8 @@ def beamlineInfo(beamline_id, info_name, info_dict=None):
             return {}
 
         # normal create
-        data = {'key': 'beamline_info', 'info_name':info_name, 'info': info_dict}
-        uid = configuration_ref.create(beamline_id,**data)
+        data = {"key": "beamline_info", "info_name": info_name, "info": info_dict}
+        uid = configuration_ref.create(beamline_id, **data)
 
 
 def setBeamlineConfigParams(paramDict, searchParams):
@@ -777,47 +799,52 @@ def setBeamlineConfigParams(paramDict, searchParams):
     beamlineConfig = beamlineInfo(**searchParams)
 
     # update with given param dict and last_modified
-    paramDict['last_modified'] = time.time()
+    paramDict["last_modified"] = time.time()
     beamlineConfig.update(paramDict)
 
-    # save  
+    # save
     beamlineInfo(info_dict=beamlineConfig, **searchParams)
 
+
 def setBeamlineConfigParam(beamline_id, paramName, paramVal):
-    beamlineInfo(beamline_id,paramName,{"val":paramVal})
+    beamlineInfo(beamline_id, paramName, {"val": paramVal})
+
 
 def getBeamlineConfigParam(beamline_id, paramName):
     try:
-        return beamlineInfo(beamline_id,paramName)["val"]
+        return beamlineInfo(beamline_id, paramName)["val"]
     except KeyError as e:
-        logger.error(f'key {paramName} does not exist as part of beamlineInfo')
+        logger.error(f"key {paramName} does not exist as part of beamlineInfo")
         raise e
 
+
 def getAllBeamlineConfigParams(beamline_id):
-  g = configuration_ref.find(key='beamline_info', beamline_id=beamline_id)
-  configList = list(g)
-  return configList
+    g = configuration_ref.find(key="beamline_info", beamline_id=beamline_id)
+    configList = list(g)
+    return configList
+
 
 def logAllBeamlineConfigParams(beamline_id):
-  printAllBeamlineConfigParams(beamline_id, log=True)
+    printAllBeamlineConfigParams(beamline_id, log=True)
+
 
 def printAllBeamlineConfigParams(beamline_id, log=False):
-  configList = getAllBeamlineConfigParams(beamline_id)
-  for i in range (0,len(configList)):
-    try:
-      if log:
-        logger.info(configList[i]['info_name'] + " " + str(configList[i]['info']['val']))
-      else:
-        print(configList[i]['info_name'] + " " + str(configList[i]['info']['val']))
-    except KeyError:
-      pass
+    configList = getAllBeamlineConfigParams(beamline_id)
+    for i in range(0, len(configList)):
+        try:
+            if log:
+                logger.info(configList[i]["info_name"] + " " + str(configList[i]["info"]["val"]))
+            else:
+                print(configList[i]["info_name"] + " " + str(configList[i]["info"]["val"]))
+        except KeyError:
+            pass
+
 
 def deleteCompletedRequestsforSample(sid):
-  return #short circuit, not what they wanted
-  logger.info("delete request " + sid)
-  requestList=getRequestsBySampleID(sid)
-  for i in range (0,len(requestList)):
-    if (requestList[i]["priority"] == -1): #good to clean up completed requests after unmount
-      if (requestList[i]["protocol"] == "raster" or requestList[i]["protocol"] == "vector"):
-        deleteRequest(requestList[i]['uid'])
-
+    return  # short circuit, not what they wanted
+    logger.info("delete request " + sid)
+    requestList = getRequestsBySampleID(sid)
+    for i in range(0, len(requestList)):
+        if requestList[i]["priority"] == -1:  # good to clean up completed requests after unmount
+            if requestList[i]["protocol"] == "raster" or requestList[i]["protocol"] == "vector":
+                deleteRequest(requestList[i]["uid"])

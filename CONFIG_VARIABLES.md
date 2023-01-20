@@ -1,0 +1,34 @@
+#TODO also check createTestDB
+Below are the configuration variables used in the LSDC GUI
+robot_online
+TOP_VIEW_CHECK
+queueCollect
+vertRasterOn
+rasterProcessFlag
+omegaMonitorPV
+mountEnabled
+spotNode*
+fastDPNode*
+rasterDefaultWidth
+rasterDefaultTime
+rasterDefaultTrans
+rasterDefaultMinSpotSize
+RASTER_TUNE_LOW_RES
+RASTER_TUNE_HIGH_RES
+RASTER_TUNE_RESO_FLAG
+RASTER_TUNE_ICE_RING_WIDTH
+RASTER_TUNE_ICE_RING_FLAG
+rasterThreshKernSize
+rasterThreshSigBckrnd
+rasterThreshSigStrong
+scannerType
+attenType
+stdTrans
+RASTER_GUI_XREC_FILL_DELAY
+burnDefaultTime
+burnDefaultTrans
+burnDefaultNumFrames
+screen_default_width
+screen_default_time
+hutchCornerCamURL
+hutchTopCamURL

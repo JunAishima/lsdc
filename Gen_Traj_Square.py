@@ -1,8 +1,9 @@
 import logging
+
 logger = logging.getLogger(__name__)
 
 def gen_traj_square(x_start, x_end, y_start, y_end, z_start, z_end, col, row):
-#12/19 skinner did not write this
+19 skinner did not write this
     #   x/y/z_start/end are the definitions (in micron) of the raster area
     #   x_end - x_start should be positive
     #   step defines the step size of the raster and should be positive

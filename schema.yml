@@ -1,0 +1,4 @@
+type # message type
+protocol # collection type
+uuid # collection object
+params # additional parameters

@@ -1,11 +1,11 @@
 #!/opt/conda_envs/lsdc-server-2022-4.0/bin/python
-import lsdb1
 import sys
+
+import lsdb1
 
 startDate = sys.argv[1]
 endDate = sys.argv[2]
 beamline = sys.argv[3]
 
-m = lsdb1.getMountCount(startDate,endDate,beamline)
+m = lsdb1.getMountCount(startDate, endDate, beamline)
 print(m)
-

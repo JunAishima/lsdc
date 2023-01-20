@@ -3,11 +3,9 @@
 from __future__ import print_function
 
 from bson import json_util
-from bson.py3compat import string_types
 from bson.dbref import DBRef
-
+from bson.py3compat import string_types
 from IPython.core import page
-
 
 DEFAULT_INDENT = 4
 
@@ -19,14 +17,14 @@ def _dbref_fix(obj):
     Created to deal with a situation like this:
     "collection" : { "$ref" : "collection", "$id" : { "$oid" : "505cdd127e89297d6f000421" } }
     """
-    if hasattr(obj, 'iteritems') or hasattr(obj, 'items'):  # PY3 support
-        #return {k: _dbref_fix(v) for k, v in obj.iteritems()}
+    if hasattr(obj, "iteritems") or hasattr(obj, "items"):  # PY3 support
+        # return {k: _dbref_fix(v) for k, v in obj.iteritems()}
         ret = {}
-        for k,v in obj.iteritems():
+        for k, v in obj.iteritems():
             ret[k] = v
         return ret
 
-    elif hasattr(obj, '__iter__') and not isinstance(obj, string_types):
+    elif hasattr(obj, "__iter__") and not isinstance(obj, string_types):
         return [_dbref_fix(v) for v in obj]
 
     elif isinstance(obj, DBRef):
@@ -34,9 +32,12 @@ def _dbref_fix(obj):
         coll = obj.collection
         db = obj.database
         d = {}
-        if id: d['$id'] = {'$oid': str(id)}
-        if coll: d['$ref'] = coll
-        if db: d['$db'] = db
+        if id:
+            d["$id"] = {"$oid": str(id)}
+        if coll:
+            d["$ref"] = coll
+        if db:
+            d["$db"] = db
         return d
 
     else:
@@ -52,12 +53,14 @@ def format_(bson, indent=DEFAULT_INDENT):
     d = _dbref_fix(bson)
     return json_util.dumps(d, indent=indent)
 
+
 def print_(bson, indent=DEFAULT_INDENT):
     """
     Takes a bson document and pretty prints it.
     DEFAULT_INDENT={0}
     """
     print(format_(bson, indent=indent))
+
 
 def ppp(bson, indent=DEFAULT_INDENT):
     """
