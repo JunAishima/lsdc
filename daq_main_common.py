@@ -15,7 +15,6 @@ import daq_utils
 import det_lib
 from beamline_lib import *
 from daq_lib import *
-
 # imports to get useful things into namespace for server
 from daq_macros import *
 from gov_lib import setGovRobot

@@ -19,18 +19,9 @@ import gov_lib
 import top_view
 from beamline_support import getPvValFromDescriptor as getPvDesc
 from beamline_support import setPvValFromDescriptor as setPvDesc
-from config_params import (
-    DETECTOR_SAFE_DISTANCE,
-    MOUNT_FAILURE,
-    MOUNT_STEP_SUCCESSFUL,
-    MOUNT_SUCCESSFUL,
-    MOUNT_UNRECOVERABLE_ERROR,
-    PINS_PER_PUCK,
-    TOP_VIEW_CHECK,
-    UNMOUNT_FAILURE,
-    UNMOUNT_STEP_SUCCESSFUL,
-    UNMOUNT_SUCCESSFUL,
-)
+from config_params import (DETECTOR_SAFE_DISTANCE, MOUNT_FAILURE, MOUNT_STEP_SUCCESSFUL, MOUNT_SUCCESSFUL,
+                           MOUNT_UNRECOVERABLE_ERROR, PINS_PER_PUCK, TOP_VIEW_CHECK, UNMOUNT_FAILURE,
+                           UNMOUNT_STEP_SUCCESSFUL, UNMOUNT_SUCCESSFUL)
 from daq_utils import getBlConfig, setBlConfig
 
 # from start_bs import gov_human, gov_robot

@@ -37,12 +37,8 @@ from bluesky.preprocessors import finalize_wrapper
 
 import gov_lib
 from config_params import *
-from fmx_annealer import (
-    amxAnnealer,
-    fmxAnnealer,
-    govStateSet,  # for using annealer specific to FMX and AMX
-    govStatusGet,
-)
+from fmx_annealer import govStateSet  # for using annealer specific to FMX and AMX
+from fmx_annealer import amxAnnealer, fmxAnnealer, govStatusGet
 from kafka_producer import send_kafka_message
 from scans import setup_vector_program, setup_zebra_vector_scan, setup_zebra_vector_scan_for_raster, zebra_daq_prep
 

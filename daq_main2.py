@@ -9,7 +9,6 @@ from logging import handlers
 
 from beamline_lib import *
 from daq_lib import *
-
 # TODO understand why imports are required here - GUI requires imports in daq_main_common
 from daq_macros import *
 from daq_main_common import pybass_init, run_server

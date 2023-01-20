@@ -2,14 +2,8 @@ import logging
 import traceback
 
 import gov_lib
-from config_params import (
-    MOUNT_FAILURE,
-    MOUNT_STEP_SUCCESSFUL,
-    MOUNT_SUCCESSFUL,
-    UNMOUNT_FAILURE,
-    UNMOUNT_STEP_SUCCESSFUL,
-    UNMOUNT_SUCCESSFUL,
-)
+from config_params import (MOUNT_FAILURE, MOUNT_STEP_SUCCESSFUL, MOUNT_SUCCESSFUL, UNMOUNT_FAILURE,
+                           UNMOUNT_STEP_SUCCESSFUL, UNMOUNT_SUCCESSFUL)
 from daq_utils import getBlConfig
 
 logger = logging.getLogger(__name__)
