@@ -37,10 +37,10 @@ from bluesky.preprocessors import finalize_wrapper
 
 import gov_lib
 from config_params import *
-from fmx_annealer import (  # for using annealer specific to FMX and AMX
+from fmx_annealer import (
     amxAnnealer,
     fmxAnnealer,
-    govStateSet,
+    govStateSet,  # for using annealer specific to FMX and AMX
     govStatusGet,
 )
 from kafka_producer import send_kafka_message
