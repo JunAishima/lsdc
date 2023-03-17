@@ -20,6 +20,7 @@ from start_bs import govs, gov_robot, flyer, RE
 import gov_lib
 from bluesky.preprocessors import finalize_wrapper
 import bluesky.plan_stubs as bps
+import protocols
 import logging
 import albulaUtils
 logger = logging.getLogger(__name__)
@@ -462,15 +463,7 @@ def logMxRequestParams(currentRequest,wait=True):
     logger.error("logMxRequestParams - ispyb error: %s" % e)
 
 
-
-def collectData(currentRequest):
-  global data_directory_name,currentIspybDCID,fastDPNodeCount,fastDPNodeCounter
-
-  if (daq_utils.beamline == "fmx"):
-    if (getPvDesc("detCoverRBV") == 0):
-      logger.info("opening det cover")
-      setPvDesc("detCoverOpen",1)
-  logMe = 1
+def extractParams(currentRequest):
   reqObj = currentRequest["request_obj"]
   data_directory_name = str(reqObj["directory"])
   exposure_period = reqObj["exposure_time"]
@@ -485,14 +478,88 @@ def collectData(currentRequest):
   prot = str(reqObj["protocol"])
   sweep_start = reqObj["sweep_start"]
   sweep_end = reqObj["sweep_end"]
-  range_degrees = abs(sweep_end-sweep_start)  
+  range_degrees = abs(sweep_end-sweep_start)
   sweep_start = reqObj["sweep_start"]%360.0
   file_number_start = reqObj["file_number_start"]
   basePath = reqObj["basePath"]
   visitName = daq_utils.getVisitName()
-  jpegDirectory = visitName + "/jpegs/" + data_directory_name[data_directory_name.find(visitName)+len(visitName):len(data_directory_name)]  
+  jpegDirectory = visitName + "/jpegs/" + data_directory_name[data_directory_name.find(visitName)+len(visitName):len(data_directory_name)]
   colDist = reqObj["detDist"]
-    
+  return {'reqObj': reqObj,
+          'data_directory_name': data_directory_name,
+          'exposure_period': exposure_period,
+          'wavelength': wavelength,
+          'resolution': resolution,
+          'slit_height': slit_height,
+          'slit_width': slit_width,
+          'attenuation': attenuation,
+          'img_width': img_width,
+          'file_prefix': file_prefix,
+          'prot': prot,
+          'sweep_start': sweep_start,
+          'sweep_end': sweep_end,
+          'range_degrees': range_degrees,
+          'file_number_start': file_number_start,
+          'basePath': basePath,
+          'visitName': visitName,
+          'jpegDirectory': jpegDirectory,
+          'colDist': colDist
+          }
+
+def characterize(currentRequest):
+          characterizationParams = reqObj["characterizationParams"]
+      index_success = daq_macros.dna_execute_collection3(0.0,img_width,2,exposure_period,data_directory_name+"/",file_prefix,1,-89.0,1,currentRequest)
+      if (index_success):
+        resultsList = db_lib.getResultsforRequest(currentRequest["uid"]) # because for testing I keep running the same request. Probably not in usual use.
+        results = None
+        for i in range(0,len(resultsList)):
+          if (resultsList[i]['result_type'] == 'characterizationStrategy'):
+            results = resultsList[i]
+            break
+        if (results != None):
+
+          strategyResults = results["result_obj"]["strategy"]
+          stratStart = strategyResults["start"]
+          stratEnd = strategyResults["end"]
+          stratWidth = strategyResults["width"]
+          stratExptime = strategyResults["exptime"]
+          stratTrans = strategyResults["transmission"]
+          stratDetDist = strategyResults["detDist"]
+          sampleID = currentRequest["sample"]
+          tempnewStratRequest = daq_utils.createDefaultRequest(sampleID)
+          newReqObj = tempnewStratRequest["request_obj"]
+          newReqObj["sweep_start"] = stratStart
+          newReqObj["sweep_end"] = stratEnd
+          newReqObj["img_width"] = stratWidth
+          newReqObj["exposure_time"] = stratExptime
+          newReqObj["attenuation"] = stratTrans
+          newReqObj["detDist"] = stratDetDist
+          newReqObj["directory"] = data_directory_name
+          newReqObj["pos_x"] = beamline_lib.motorPosFromDescriptor("sampleX")
+          newReqObj["pos_y"] = beamline_lib.motorPosFromDescriptor("sampleY")
+          newReqObj["pos_z"] = beamline_lib.motorPosFromDescriptor("sampleZ")
+          newReqObj["fastDP"] = True # this is where you might want a "new from old" request to carry over stuff like this.
+          newReqObj["fastEP"] = reqObj["fastEP"]
+          newReqObj["dimple"] = reqObj["dimple"]
+          newReqObj["xia2"] = reqObj["xia2"]
+          runNum = db_lib.incrementSampleRequestCount(sampleID)
+          newReqObj["runNum"] = runNum
+          newStratRequest = db_lib.addRequesttoSample(sampleID,newReqObj["protocol"],daq_utils.owner,newReqObj,priority=0,proposalID=daq_utils.getProposalID())
+          if (reqObj["protocol"] == "ednaCol"):
+            logger.info("new strat req = ")
+            logger.info(newStratRequest)
+            db_lib.updatePriority(currentRequest["uid"],-1)
+            refreshGuiTree()
+            collectData(db_lib.getRequestByID(newStratRequest))
+            return 1
+def collectData(currentRequest):
+  global data_directory_name,currentIspybDCID,fastDPNodeCount,fastDPNodeCounter
+
+  if (daq_utils.beamline == "fmx"):
+    if (getPvDesc("detCoverRBV") == 0):
+      logger.info("opening det cover")
+      setPvDesc("detCoverOpen",1)
+  logMe = 1
   status = 1
   if not (os.path.isdir(data_directory_name)):
     logger.debug(f'creating {data_directory_name}')
@@ -526,7 +593,10 @@ def collectData(currentRequest):
     daq_macros.multiCol(currentRequest)
   elif (prot == "eScan"):
     daq_macros.eScan(currentRequest)
-  else: #standard, screening, or edna - these may require autoalign, checking first
+  elif (prot == "standard"):
+    protocols.standard(currentRequest)
+    protocols.standard_processing(currentRequest)
+  else: #screening, or edna - these may require autoalign, checking first
     if (reqObj["pos_x"] != -999):
       beamline_lib.mvaDescriptor("sampleX",reqObj["pos_x"])
       beamline_lib.mvaDescriptor("sampleY",reqObj["pos_y"])
@@ -551,51 +621,7 @@ def collectData(currentRequest):
       daq_macros.setTrans(attenuation)      
 
     if (reqObj["protocol"] == "characterize" or reqObj["protocol"] == "ednaCol"):
-      characterizationParams = reqObj["characterizationParams"]
-      index_success = daq_macros.dna_execute_collection3(0.0,img_width,2,exposure_period,data_directory_name+"/",file_prefix,1,-89.0,1,currentRequest)
-      if (index_success):        
-        resultsList = db_lib.getResultsforRequest(currentRequest["uid"]) # because for testing I keep running the same request. Probably not in usual use.
-        results = None
-        for i in range(0,len(resultsList)):
-          if (resultsList[i]['result_type'] == 'characterizationStrategy'):
-            results = resultsList[i]
-            break
-        if (results != None):
-          
-          strategyResults = results["result_obj"]["strategy"]
-          stratStart = strategyResults["start"]
-          stratEnd = strategyResults["end"]
-          stratWidth = strategyResults["width"]
-          stratExptime = strategyResults["exptime"]
-          stratTrans = strategyResults["transmission"]          
-          stratDetDist = strategyResults["detDist"]
-          sampleID = currentRequest["sample"]
-          tempnewStratRequest = daq_utils.createDefaultRequest(sampleID)
-          newReqObj = tempnewStratRequest["request_obj"]
-          newReqObj["sweep_start"] = stratStart
-          newReqObj["sweep_end"] = stratEnd
-          newReqObj["img_width"] = stratWidth
-          newReqObj["exposure_time"] = stratExptime
-          newReqObj["attenuation"] = stratTrans
-          newReqObj["detDist"] = stratDetDist
-          newReqObj["directory"] = data_directory_name
-          newReqObj["pos_x"] = beamline_lib.motorPosFromDescriptor("sampleX")
-          newReqObj["pos_y"] = beamline_lib.motorPosFromDescriptor("sampleY")
-          newReqObj["pos_z"] = beamline_lib.motorPosFromDescriptor("sampleZ")
-          newReqObj["fastDP"] = True # this is where you might want a "new from old" request to carry over stuff like this.
-          newReqObj["fastEP"] = reqObj["fastEP"]
-          newReqObj["dimple"] = reqObj["dimple"]                
-          newReqObj["xia2"] = reqObj["xia2"]
-          runNum = db_lib.incrementSampleRequestCount(sampleID)
-          newReqObj["runNum"] = runNum
-          newStratRequest = db_lib.addRequesttoSample(sampleID,newReqObj["protocol"],daq_utils.owner,newReqObj,priority=0,proposalID=daq_utils.getProposalID())
-          if (reqObj["protocol"] == "ednaCol"):
-            logger.info("new strat req = ")
-            logger.info(newStratRequest)
-            db_lib.updatePriority(currentRequest["uid"],-1)
-            refreshGuiTree()
-            collectData(db_lib.getRequestByID(newStratRequest))
-            return 1
+        characterize(reqObj)
     else: #standard
       logger.info("moving omega to start " + str(time.time()))      
       if daq_utils.beamline == "nyx":
@@ -617,9 +643,9 @@ def collectData(currentRequest):
     logger.error('caught key error in logging: %s' % e)
 
   # collection finished, start processing
-  if reqObj["protocol"] in ("standard", "vector", "raster"):
+  if reqObj["protocol"] in ("vector", "raster"):
     send_kafka_message(topic=f'{daq_utils.beamline}.lsdc.documents', event='stop', uuid=currentRequest['uid'], protocol=reqObj["protocol"])
-  if (prot == "vector" or prot == "standard" or prot == "stepVector"):
+  if (prot == "vector"  or prot == "stepVector"):
     if daq_utils.beamline != "nyx":
       seqNum = flyer.detector.cam.sequence_id.get()
       comm_s = os.environ["LSDCHOME"] + "/runSpotFinder4syncW.py " + data_directory_name + " " + file_prefix + " " + str(currentRequest["uid"]) + " " + str(seqNum) + " " + str(currentIspybDCID)+ "&"
