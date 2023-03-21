@@ -2207,7 +2207,7 @@ def runRasterScan(currentRequest,rasterType=""): #this actually defines and runs
     time.sleep(1) #I think I really need this, not sure why
     RE(snakeRaster(rasterReqID))
 
-def gotoMaxRaster(rasterResult,multiColThreshold=-1,**kwargs):
+def collate_raster_results(rasterResult,multiColThreshold=-1,**kwargs):
   global autoVectorCoarseCoords,autoVectorFlag
   
   requestID = rasterResult["request"]
@@ -2229,6 +2229,9 @@ def gotoMaxRaster(rasterResult,multiColThreshold=-1,**kwargs):
     scoreOption = "d_min"
   else:
     scoreOption = "total_intensity"
+  return cellResults
+
+def find_multicol_spots(cellResults):
   for i in range (0,len(cellResults)):
     try:
       scoreVal = float(cellResults[i][scoreOption])
@@ -2237,13 +2240,20 @@ def gotoMaxRaster(rasterResult,multiColThreshold=-1,**kwargs):
     if (multiColThreshold>-1):
       logger.info("doing multicol")
       if (scoreVal >= multiColThreshold):
-        hitFile = cellResults[i]["cellMapKey"]
-        hitCoords = rasterMap[hitFile]
+        hotFile = cellResults[i]["cellMapKey"]
+        hotCoords = rasterMap[hotFile]
         parentReqID = rasterResult['result_obj']["parentReqID"]
         if (parentReqID == -1):
           addMultiRequestLocation(requestID,hitCoords,i)
         else:
           addMultiRequestLocation(parentReqID,hitCoords,i)        
+
+def find_hot_file(cellResults):
+  for i in range (0,len(cellResults)):
+    try:
+      scoreVal = float(cellResults[i][scoreOption])
+    except TypeError:
+      scoreVal = 0.0
     if (scoreOption == "d_min"):
       if (scoreVal < floor and scoreVal != -1):
         floor = scoreVal
@@ -2267,7 +2277,7 @@ def gotoMaxRaster(rasterResult,multiColThreshold=-1,**kwargs):
                                  "omega",kwargs['omega'])
     else: beamline_lib.mvaDescriptor("sampleX",x,"sampleY",y,"sampleZ",z)
 
-    if (autoVectorFlag): #if we found a hotspot, then look again at cellResults for coarse vector start and end
+def find_vector_start_end(cellResults):
       xminColumn = [] #these are the "line rasters" of the ends of threshold points determined by the first pass on the raster results
       xmaxColumn = []
       vectorThreshold = 0.7*ceiling
