@@ -2241,9 +2241,9 @@ def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold):
         hotCoords = rasterMap[hotFile]
         parentReqID = rasterResult['result_obj']["parentReqID"]
         if (parentReqID == -1):
-          addMultiRequestLocation(requestID,hitCoords,i)
+          addMultiRequestLocation(requestID,hotCoords,i)
         else:
-          addMultiRequestLocation(parentReqID,hitCoords,i)        
+          addMultiRequestLocation(parentReqID,hotCoords,i)
 
 def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption):
   ceiling = 0.0
