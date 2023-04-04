@@ -2214,8 +2214,6 @@ def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
     logger.info("no raster result!!\n")
     raise ValueError("raster result object is None")
     return
-  ceiling = 0.0
-  floor = 100000000.0 #for resolution where small number means high score
   hotFile = ""
   scoreOption = ""
   logger.info("in gotomax")
@@ -2228,7 +2226,7 @@ def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
     scoreOption = "d_min"
   else:
     scoreOption = "total_intensity"
-  return cellResults, scoreOption
+  return cellResults, rasterMap, scoreOption
 
 def findMultiColSpots(cellResults, scoreOption, multiColThreshold):
   for i in range (0,len(cellResults)):
@@ -2247,7 +2245,9 @@ def findMultiColSpots(cellResults, scoreOption, multiColThreshold):
         else:
           addMultiRequestLocation(parentReqID,hitCoords,i)        
 
-def findAndMoveToHotSpot(cellResults, scoreOption):
+def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption):
+  ceiling = 0.0
+  floor = 100000000.0 #for resolution where small number means high score
   for i in range (0,len(cellResults)):
     try:
       scoreVal = float(cellResults[i][scoreOption])
@@ -2346,12 +2346,12 @@ def findVectorStartEnd(cellResults, rasterMap, scoreOption, ceiling):
     autoVectorCoarseCoords = {"start":{"x":xmin,"y":ymin,"z":zmin},"end":{"x":xmax,"y":ymax,"z":zmax}}
 
 def gotoMaxRaster(rasterResult):
-    cellResults, scoreOption = collateRasterResults(rasterResult)
-    findAndMoveToHotSpot(cellResults, scoreOption)
+    cellResults, rasterMap, scoreOption = collateRasterResults(rasterResult)
+    findAndMoveToHotSpot(cellResults, rasterMap, scoreOption)
 
 def addMultiColFromRaster(rasterResult):
-    cellResults, scoreOption = collateRasterResults(rasterResult)
-    findMultiColSpots(cellResults, scoreOption)
+    cellResults, rasterMap, scoreOption = collateRasterResults(rasterResult)
+    findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold)
 
 def addMultiRequestLocation(parentReqID,hitCoords,locIndex): #rough proto of what to pass here for details like how to organize data
   parentRequest = db_lib.getRequestByID(parentReqID)
