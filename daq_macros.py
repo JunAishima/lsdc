@@ -2228,22 +2228,25 @@ def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
     scoreOption = "total_intensity"
   return cellResults, rasterMap, scoreOption
 
-def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold):
-  for i in range (0,len(cellResults)):
-    try:
-      scoreVal = float(cellResults[i][scoreOption])
-    except TypeError:
-      scoreVal = 0.0
-    if (multiColThreshold>-1):
-      logger.info("doing multicol")
-      if (scoreVal >= multiColThreshold):
-        hotFile = cellResults[i]["cellMapKey"]
-        hotCoords = rasterMap[hotFile]
-        parentReqID = rasterResult['result_obj']["parentReqID"]
-        if (parentReqID == -1):
+def sortRasterResults(cellResults):
+    results = copy.deepcopy(cellResults)
+    sorted(results, key=lambda results:results[scoreOption], reverse=True)
+    return results
+
+# only major difference from before is that the locations are added by maximum value
+# instead of image number from  start of raster
+def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold, maxNumSpots=len(cellResults):
+# rasterResult, requestID
+  i = 0
+  while cellResults[i][scoreOption] > multiColThreshold and maxNumSpots > i:
+      hotFile = cellResults[i]["cellMapKey"]
+      hotCoords = rasterMap[hotFile]
+      parentReqID = rasterResult['result_obj']["parentReqID"]
+      if (parentReqID == -1):
           addMultiRequestLocation(requestID,hotCoords,i)
-        else:
+      else:
           addMultiRequestLocation(parentReqID,hotCoords,i)
+      i += 1
 
 def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption):
   ceiling = 0.0
