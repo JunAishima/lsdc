@@ -2231,7 +2231,7 @@ def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
     scoreOption = "total_intensity"
   return cellResults, scoreOption
 
-def findMulticolSpots(cellResults):
+def findMultiColSpots(cellResults, scoreOption, multiColThreshold):
   for i in range (0,len(cellResults)):
     try:
       scoreVal = float(cellResults[i][scoreOption])
