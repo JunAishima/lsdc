@@ -2208,8 +2208,7 @@ def runRasterScan(currentRequest,rasterType=""): #this actually defines and runs
     RE(snakeRaster(rasterReqID))
 
 def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
-  global autoVectorCoarseCoords,autoVectorFlag
-  
+
   requestID = rasterResult["request"]
   if (rasterResult["result_obj"]["rasterCellResults"]['resultObj'] == None):
     logger.info("no raster result!!\n")
