@@ -2247,7 +2247,7 @@ def findMultiColSpots(cellResults, scoreOption, multiColThreshold):
         else:
           addMultiRequestLocation(parentReqID,hitCoords,i)        
 
-def findAndMoveToHotSpot(cellResults):
+def findAndMoveToHotSpot(cellResults, scoreOption):
   for i in range (0,len(cellResults)):
     try:
       scoreVal = float(cellResults[i][scoreOption])
@@ -2347,7 +2347,7 @@ def findVectorStartEnd(cellResults, rasterMap, scoreOption, ceiling):
 
 def gotoMaxRaster(rasterResult):
     cellResults, scoreOption = collateRasterResults(rasterResult)
-    findAndGoToMaxSpot(cellResults, scoreOption)
+    findAndMoveToHotSpot(cellResults, scoreOption)
 
 def addMultiColFromRaster(rasterResult):
     cellResults, scoreOption = collateRasterResults(rasterResult)
