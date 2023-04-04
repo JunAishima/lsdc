@@ -2207,7 +2207,7 @@ def runRasterScan(currentRequest,rasterType=""): #this actually defines and runs
     time.sleep(1) #I think I really need this, not sure why
     RE(snakeRaster(rasterReqID))
 
-def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
+def collateRasterResults(rasterResult,multiColThreshold=-1):
 
   requestID = rasterResult["request"]
   if (rasterResult["result_obj"]["rasterCellResults"]['resultObj'] == None):
@@ -2235,7 +2235,7 @@ def sortRasterResults(cellResults):
 
 # only major difference from before is that the locations are added by maximum value
 # instead of image number from  start of raster
-def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold, maxNumSpots=len(cellResults):
+def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold, maxNumSpots=len(cellResults)):
 # rasterResult, requestID
   i = 0
   while cellResults[i][scoreOption] > multiColThreshold and maxNumSpots > i:
@@ -2248,7 +2248,7 @@ def findMultiColSpots(cellResults, rasterMap, scoreOption, multiColThreshold, ma
           addMultiRequestLocation(parentReqID,hotCoords,i)
       i += 1
 
-def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption):
+def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption, omega):
   ceiling = 0.0
   floor = 100000000.0 #for resolution where small number means high score
   for i in range (0,len(cellResults)):
@@ -2272,7 +2272,7 @@ def findAndMoveToHotSpot(cellResults, rasterMap, scoreOption):
     z = hotCoords["z"]
     logger.info("goto " + str(x) + " " + str(y) + " " + str(z))
 
-    if 'omega' in kwargs:
+    if omega:
       beamline_lib.mvaDescriptor("sampleX",x,
                                  "sampleY",y,
                                  "sampleZ",z,
@@ -2348,9 +2348,9 @@ def findVectorStartEnd(cellResults, rasterMap, scoreOption, ceiling):
 
     autoVectorCoarseCoords = {"start":{"x":xmin,"y":ymin,"z":zmin},"end":{"x":xmax,"y":ymax,"z":zmax}}
 
-def gotoMaxRaster(rasterResult):
+def gotoMaxRaster(rasterResult, omega=None):
     cellResults, rasterMap, scoreOption = collateRasterResults(rasterResult)
-    findAndMoveToHotSpot(cellResults, rasterMap, scoreOption)
+    findAndMoveToHotSpot(cellResults, rasterMap, scoreOption, omega)
 
 def addMultiColFromRaster(rasterResult):
     cellResults, rasterMap, scoreOption = collateRasterResults(rasterResult)
