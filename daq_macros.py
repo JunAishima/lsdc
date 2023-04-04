@@ -2222,14 +2222,14 @@ def collateRasterResults(rasterResult,multiColThreshold=-1,**kwargs):
   logger.info("in gotomax")
   cellResults = rasterResult["result_obj"]["rasterCellResults"]['resultObj']
   rasterMap = rasterResult["result_obj"]["rasterCellMap"]  
-  rasterScoreFlag = int(db_lib.beamlineInfo(daq_utils.beamline,'rasterScoreFlag')["index"])
+  rasterScoreFlag = int(getBlConfig('rasterScoreFlag')["index"])
   if (rasterScoreFlag==0):
     scoreOption = "spot_count_no_ice"
   elif (rasterScoreFlag==1):
     scoreOption = "d_min"
   else:
     scoreOption = "total_intensity"
-  return cellResults
+  return cellResults, scoreOption
 
 def findMulticolSpots(cellResults):
   for i in range (0,len(cellResults)):
