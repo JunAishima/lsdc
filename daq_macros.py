@@ -175,7 +175,7 @@ def changeImageCenterHighMag(x,y,czoom):
     xclickFullFOV = x_click + zoomMinXRBV
     yclickFullFOV = y_click + zoomMinYRBV
   else:
-    binningFactor = 2.0
+    binningFactor = 4.0
     xclickFullFOV = (x_click * binningFactor) + minXRBV
     yclickFullFOV = (y_click * binningFactor) + minYRBV    
   new_minXZoom = xclickFullFOV-(sizeXRBV/2.0)
