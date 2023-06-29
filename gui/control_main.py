@@ -1550,7 +1550,7 @@ class ControlMain(QtWidgets.QMainWindow):
         fov = {}
         zoomedCursorX = daq_utils.screenPixCenterX - self.centerMarkerCharOffsetX
         zoomedCursorY = daq_utils.screenPixCenterY - self.centerMarkerCharOffsetY
-        zoom_factor_4 = 2
+        zoom_factor_4 = 4.0
         if self.zoom2Radio.isChecked():
             self.flushBuffer(self.captureLowMagZoom)
             self.capture = self.captureLowMagZoom
@@ -1849,7 +1849,8 @@ class ControlMain(QtWidgets.QMainWindow):
         zoomedCursorX = daq_utils.screenPixCenterX - self.centerMarkerCharOffsetX
         zoomedCursorY = daq_utils.screenPixCenterY - self.centerMarkerCharOffsetY
         if self.zoom4Radio.isChecked():  # highmagzoom
-            zoom_factor = 2.0
+            zoom_factor = 4.0  # TODO these calculations are the same as zoomLevelToggledCB
+                               # and processLowMagCursorChange
             unzoomedCursorX = (
                 self.highMagCursorX_pv.get() - self.centerMarkerCharOffsetX
             )
