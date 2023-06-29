@@ -1550,6 +1550,7 @@ class ControlMain(QtWidgets.QMainWindow):
         fov = {}
         zoomedCursorX = daq_utils.screenPixCenterX - self.centerMarkerCharOffsetX
         zoomedCursorY = daq_utils.screenPixCenterY - self.centerMarkerCharOffsetY
+        zoom_factor_4 = 2
         if self.zoom2Radio.isChecked():
             self.flushBuffer(self.captureLowMagZoom)
             self.capture = self.captureLowMagZoom
@@ -1608,28 +1609,28 @@ class ControlMain(QtWidgets.QMainWindow):
         elif self.zoom4Radio.isChecked():
             self.flushBuffer(self.captureHighMagZoom)
             self.capture = self.captureHighMagZoom
-            fov["x"] = daq_utils.highMagFOVx / 2.0
-            fov["y"] = daq_utils.highMagFOVy / 2.0
+            fov["x"] = daq_utils.highMagFOVx / zoom_factor_mag4
+            fov["y"] = daq_utils.highMagFOVy / zoom_factor_mag4
             unzoomedCursorX = (
                 self.highMagCursorX_pv.get() - self.centerMarkerCharOffsetX
             )
             unzoomedCursorY = (
                 self.highMagCursorY_pv.get() - self.centerMarkerCharOffsetY
             )
-            if unzoomedCursorX * 2.0 < daq_utils.screenPixCenterX:
-                zoomedCursorX = unzoomedCursorX * 2.0
-            if unzoomedCursorY * 2.0 < daq_utils.screenPixCenterY:
-                zoomedCursorY = unzoomedCursorY * 2.0
+            if unzoomedCursorX * zoom_factor_mag4 < daq_utils.screenPixCenterX:
+                zoomedCursorX = unzoomedCursorX * zoom_factor_mag4
+            if unzoomedCursorY * zoom_factor_mag4 < daq_utils.screenPixCenterY:
+                zoomedCursorY = unzoomedCursorY * zoom_factor_mag4
             if (
                 unzoomedCursorX - daq_utils.screenPixCenterX
                 > daq_utils.screenPixCenterX / 2
             ):
-                zoomedCursorX = (unzoomedCursorX * 2.0) - daq_utils.screenPixX
+                zoomedCursorX = (unzoomedCursorX * zoom_factor_mag4) - daq_utils.screenPixX
             if (
                 unzoomedCursorY - daq_utils.screenPixCenterY
                 > daq_utils.screenPixCenterY / 2
             ):
-                zoomedCursorY = (unzoomedCursorY * 2.0) - daq_utils.screenPixY
+                zoomedCursorY = (unzoomedCursorY * zoom_factor_mag4) - daq_utils.screenPixY
             self.centerMarker.setPos(zoomedCursorX, zoomedCursorY)
             self.beamSizeXPixels = self.screenXmicrons2pixels(self.tempBeamSizeXMicrons)
             self.beamSizeYPixels = self.screenYmicrons2pixels(self.tempBeamSizeYMicrons)
