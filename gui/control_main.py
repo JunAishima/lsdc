@@ -3257,8 +3257,8 @@ class ControlMain(QtWidgets.QMainWindow):
             fov["x"] = daq_utils.lowMagFOVx
             fov["y"] = daq_utils.lowMagFOVy
         elif self.zoom4Radio.isChecked():
-            fov["x"] = daq_utils.highMagFOVx / 2.0
-            fov["y"] = daq_utils.highMagFOVy / 2.0
+            fov["x"] = daq_utils.highMagFOVx / 4.0
+            fov["y"] = daq_utils.highMagFOVy / 4.0
         else:
             fov["x"] = daq_utils.highMagFOVx
             fov["y"] = daq_utils.highMagFOVy
