@@ -1848,26 +1848,27 @@ class ControlMain(QtWidgets.QMainWindow):
         zoomedCursorX = daq_utils.screenPixCenterX - self.centerMarkerCharOffsetX
         zoomedCursorY = daq_utils.screenPixCenterY - self.centerMarkerCharOffsetY
         if self.zoom4Radio.isChecked():  # highmagzoom
+            zoom_factor = 2.0
             unzoomedCursorX = (
                 self.highMagCursorX_pv.get() - self.centerMarkerCharOffsetX
             )
             unzoomedCursorY = (
                 self.highMagCursorY_pv.get() - self.centerMarkerCharOffsetY
             )
-            if unzoomedCursorX * 2.0 < daq_utils.screenPixCenterX:
-                zoomedCursorX = unzoomedCursorX * 2.0
-            if unzoomedCursorY * 2.0 < daq_utils.screenPixCenterY:
-                zoomedCursorY = unzoomedCursorY * 2.0
+            if unzoomedCursorX * zoom_factor < daq_utils.screenPixCenterX:
+                zoomedCursorX = unzoomedCursorX * zoom_factor
+            if unzoomedCursorY * zoom_factor < daq_utils.screenPixCenterY:
+                zoomedCursorY = unzoomedCursorY * zoom_factor
             if (
                 unzoomedCursorX - daq_utils.screenPixCenterX
                 > daq_utils.screenPixCenterX / 2
             ):
-                zoomedCursorX = (unzoomedCursorX * 2.0) - daq_utils.screenPixX
+                zoomedCursorX = (unzoomedCursorX * zoom_factor) - daq_utils.screenPixX
             if (
                 unzoomedCursorY - daq_utils.screenPixCenterY
                 > daq_utils.screenPixCenterY / 2
             ):
-                zoomedCursorY = (unzoomedCursorY * 2.0) - daq_utils.screenPixY
+                zoomedCursorY = (unzoomedCursorY * zoom_factor) - daq_utils.screenPixY
             self.centerMarker.setPos(zoomedCursorX, zoomedCursorY)
             self.beamSizeXPixels = self.screenXmicrons2pixels(self.tempBeamSizeXMicrons)
             self.beamSizeYPixels = self.screenYmicrons2pixels(self.tempBeamSizeYMicrons)
