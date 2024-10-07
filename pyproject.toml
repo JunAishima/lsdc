@@ -36,3 +36,8 @@ Documentation = "https://nsls-ii.github.io/lsdc"
 Discussions = "https://github.com/NSLS-II/lsdc/discussions"
 Changelog = "https://nsls-ii.github.io/lsdc/developer_notes/release_notes.html"
 
+[project.optional-dependencies]
+docs = [
+    "sphinx",
+    "sphinx_rtd_theme"
+]
