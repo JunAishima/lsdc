@@ -1,0 +1,38 @@
+[project]
+name = "LSDC"
+description = "Life Sciences Data Collection - a data acquisition software package"
+readme = "README.md"
+license.file = "LICENSE"
+authors = [
+  { name = "Jun Aishima", email = "jaishima@bnl.gov" },
+  { name = "Venkateswaran Shekar", email = "vshekar@bnl.gov" },
+  { name = "Michael Skinner", email = "mskinner@bnl.gov" },
+]
+maintainers = [
+  { name = "NSLS-II", email = "dssi@bnl.gov" },
+]
+requires-python = ">=3.8"
+
+dependencies = [
+  "typing_extensions",
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/NSLS-II/lsdc"
+Documentation = "https://nsls-ii.github.io/lsdc"
+"Bug Tracker" = "https://github.com/NSLS-II/lsdc/issues"
+Discussions = "https://github.com/NSLS-II/lsdc/discussions"
+Changelog = "https://nsls-ii.github.io/lsdc/developer_notes/release_notes.html"
+
